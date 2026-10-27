@@ -1,0 +1,34 @@
+# Data: large and potentially sensitive, downloaded from Canvas
+data/raw/*
+!data/raw/.gitkeep
+*.pcap
+*.pcapng
+*.cap
+dns.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Quarto and LaTeX build output
+report/*.pdf
+report/*_files/
+report/.quarto/
+.quarto/
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Editor and OS
+.vscode/
+.DS_Store
+Thumbs.db
+~$*

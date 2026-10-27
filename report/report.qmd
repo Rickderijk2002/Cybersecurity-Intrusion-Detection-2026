@@ -1,0 +1,168 @@
+---
+format:
+  pdf:
+    documentclass: article
+    classoption: [a4paper, table]
+    geometry: margin=2.5cm
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    cite-method: natbib
+    biblio-style: IEEEtranDOI
+    include-in-header:
+      - template/settings.tex
+      - template/header.tex
+    include-before-body: template/frontpage.tex
+    keep-tex: false
+bibliography: references.bib
+execute:
+  echo: false
+  warning: false
+---
+
+<!--
+HOW THIS FILE WORKS
+- Front page values (title, group, authors) live in template/settings.tex, not here.
+- Cite with [@key] using keys from references.bib. Figures: ![Caption](../figures/x.png){#fig-x}, refer with @fig-x.
+- Anything inside HTML comments like this one is guidance and never reaches the PDF.
+- Build: quarto render report.qmd   (from this folder)
+- Original LaTeX template (fallback for Overleaf): _template-original/
+-->
+
+# Introduction {#sec-introduction}
+
+<!-- Topic of the report, context, available resources for the investigation, and a short
+     explanation of what each section covers. No lengthy introduction.
+     Tone: clear and concise, facts over opinions, academic caution wherever uncertain. -->
+
+TODO: topic, context (case and technique chosen), data available, outline of the sections. TTPs follow the MITRE ATT&CK taxonomy [@attack].
+
+# Attack Investigation {#sec-attack-investigation}
+
+<!-- Describe what was investigated and HOW. Key point: how was the incident first discovered in
+     the data (manual inspection, flow and pattern analysis, comparing IoCs with CTI reports)?
+     Cite CTI sources and relate them to this incident: similarities and differences. -->
+
+TODO: investigation approach and how the incident was discovered in the PCAP.
+
+## Protocols and Mechanics {#sec-protocols}
+
+<!-- Overview of the protocol attacked (or the message type used by the attacker): format,
+     order of messages, actions on transmission or receipt. A protocol diagram works well. -->
+
+TODO: protocol description.
+
+## Incident Description {#sec-incident}
+
+<!-- Chronological attacker actions with the information that correlates consecutive steps.
+     How the incident happened, what was observed after initial compromise (exfiltration,
+     propagation). Classify evidence per MITRE ATT&CK TTP, contextualised and combined.
+     Affected assets and impact in context. Attribution: only what the data supports. -->
+
+TODO: timeline, TTP table, affected assets, impact.
+
+| Time | Observation | Evidence | ATT&CK tactic | ATT&CK technique |
+|---|---|---|---|---|
+| TODO | TODO | TODO | TODO | TODO |
+
+: Chronological attack overview mapped to MITRE ATT&CK {#tbl-timeline}
+
+## Attack Mechanics {#sec-mechanics}
+
+<!-- Technical characteristics of the attack (broader than this sample) and how they support
+     detection elsewhere. Focus on core characteristics that are hard for an attacker to change.
+     Per characteristic, discuss:
+       - specificity to this type of incident, malware or attacker
+         (also seen with other incidents? also seen with benign behaviour?)
+       - how easy it is for an adversary to attack without this characteristic
+       - how easy it is to check for it automatically
+       - the incident stage in which it can be observed -->
+
+TODO: characteristics table or subsections.
+
+| Characteristic | Specificity | Benign overlap | Evasion difficulty | Automatable | Stage |
+|---|---|---|---|---|---|
+| TODO | TODO | TODO | TODO | TODO | TODO |
+
+: Attack characteristics and their detection value {#tbl-characteristics}
+
+# Detection Method Development and Evaluation {#sec-detection}
+
+<!-- Explain how detection methods are derived from the characteristics above. Ideally they cover
+     several attack stages and make evasion hard. Report the steps taken to develop and test them.
+     Empirical: metrics on the available data, interpreted in the dataset's context, FPs and FNs
+     investigated. Theoretical: relate to typical environments, advantages, disadvantages,
+     alternatives that justify the chosen approach. -->
+
+TODO: overview of the methods and how they map to the characteristics.
+
+## Detection Method 1: [technique] {#sec-method-1}
+
+<!-- Motivation, characteristic targeted, rule or implementation, evaluation (metrics, FPs, FNs). -->
+
+TODO
+
+## Detection Method 2 (optional) {#sec-method-2}
+
+<!-- Why the first method was not or would not be sufficient, and why this one was chosen. -->
+
+TODO
+
+# Mitigation and Protection {#sec-mitigation}
+
+<!-- Optional. How can organisations prevent this, and how to eradicate and respond once detected? -->
+
+TODO
+
+# Discussion {#sec-discussion}
+
+<!-- Optional. Lessons from the investigation, what worked and what did not, what to do differently,
+     and how others can build on this work. -->
+
+## Investigation
+
+TODO
+
+## Detection Method Development and Evaluation
+
+TODO
+
+## Future Opportunities
+
+TODO
+
+# Conclusion {#sec-conclusion}
+
+<!-- Outcome of the investigation and the detection methods, put in a broader context. -->
+
+TODO
+
+# References {-}
+
+::: {#refs}
+:::
+
+\newpage
+\appendix
+
+# Appendix A: Atomic Indicators of Compromise {-}
+
+<!-- Industry reports usually end with a table of atomic IoCs: IPs, MACs, domains, e-mail addresses,
+     JA3, HASSH, file names, hashes. Put malicious IPs and domains found in the data here. -->
+
+\begin{landscape}
+
+| Type | Value | Context | First seen |
+|---|---|---|---|
+| IP | TODO | TODO | TODO |
+| Domain | TODO | TODO | TODO |
+
+: Atomic indicators of compromise {#tbl-iocs}
+
+\end{landscape}
+
+# Appendix B: Additional Figures and Tables {-}
+
+<!-- Figures that are not needed to follow the main text but take much space. -->
+
+TODO

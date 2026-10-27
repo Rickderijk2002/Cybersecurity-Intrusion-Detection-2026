@@ -1,0 +1,89 @@
+\section{Introduction} \label{section: introduction}
+
+This template is adapted from~\cite{report-template} and provides a suggested structure to follow. Although you may deviate from this structure, given that every project is unique, you are encouraged to cover at least the topics mentioned in this template. Following this template does not guarantee a good report; you should always check the guidelines and rubric as mentioned on Canvas and during the lectures. In case of doubt about your course of action, contact the responsible lecturers or teaching assistants.
+
+The report should be clear and concise. All concepts should be understandable from the report, given the background of a student enrolled in this course. Irrelevant information should be left out where possible. Wherever uncertainty exists, academic caution should be used (limit the number of opinions or guesses), and facts should be emphasised. The report should be structured coherently, and arguments should be well-established. For more general tips on academic writing, we suggest you take a look at this post by Purdue about Academic writing ~\cite{academic-writing}. 
+We recommend you use tools such as LanguageTool~\cite{language-tool}, which have browser extensions that integrate well with Overleaf, to check the report before submission.
+
+In the introduction, mention the topic of the report, the context, and available resources for the investigation. You should also briefly explain what is covered in each section. There is no need to make a lengthy introduction.
+
+\section{Attack Investigation} \label{section: attack investigation}
+In this section, you should first describe what you investigated and how you did this. 
+
+An important point is how you initially discovered the incident from the available data. This can be done manually by checking the data or flow, analysing patterns, comparing Indicators of Compromise (IPs, etc) with reports. You should also refer to (cite) any resources, such as open Cyber Threat Intelligence (CTI) sources, you used to understand the incident. Such external sources should be related to the incident in a way that allows the reader to understand similarities and differences where relevant.
+
+\subsection{Protocols / Mechanic Description}
+
+After detailing how you discovered the incident, you should provide an overview of the protocol attacked (or the specific type of message being used by the attacker). You can do that briefly by adding an image with the protocol (or message type) format, order of messages exchanged between communicating entities, and/or actions taken on the transmission/receipt of messages or events.
+
+\subsection{Incident Description}
+
+You should provide an overview of the incident, explained by highlighting relevant information. Depending on your case, it might be convenient to present individual attacker actions in chronological order, with (relevant) information allowing the correlation of consecutive steps (when that is the case).
+
+You should first detail how the incident happened, and what actions could be observed after the initial compromise (i.e., such as data exfiltration or propagation). 
+
+In some cases, it is convenient to classify attack evidence based on Tactics, Techniques, and Procedures (TTPs) following MITRE ATT\&CK~\cite{attack} taxonomy. Different TTPs should be contextualised and combined. 
+
+Finally, you should identify affected assets (like data exfiltrated) and discuss the impact of the incident in the context in which it occurred (based on the available data).
+
+You might also consider whether you can (or cannot) analyse or even identify who is responsible for the incident. That is likely not the case, but check for malicious IPs / domains, and report them in Appendix~\ref{section: appendix B title}. Please note that attribution is very complex and multifaceted; it is best not to make any claims you cannot support.
+
+\subsection{Attack Mechanics}
+
+In this subsection, you should describe the technical characteristics of the attack (broader scope, not just your sample) and how these observations may be used for detection in other cases. Although you should focus on the core characteristics of the incident, which are difficult to adjust for an attacker, you are also encouraged to include characteristics that are not covered in \cref{section: detection method development and evaluation}.
+
+For each characteristic, you may discuss:
+
+\begin{itemize}
+    \item The specificity of the characteristic to the (type of) incident, malware, or attacker.
+    \begin{itemize}
+        \item Can this characteristic also be observed due to other (types) of incidents, malware, or attackers?
+        \item Can this characteristic also be observed due to benign behaviour?
+    \end{itemize}
+    \item How easy it is for an adversary to mount a similar attack without this characteristic.
+    \item How easy it is to check for the presence of this characteristic in an automated way.
+    \item The stage of the incident in which this characteristic can be observed.
+\end{itemize}
+
+\section{Detection Method Development and Evaluation} \label{section: detection method development and evaluation}
+
+In this section, you should explain how you derived detection methods from the characteristics identified in the previous section. 
+Ideally, the proposed detection methods cover various stages of the attack and make it difficult for an adversary to evade detection altogether. 
+
+Make sure you report the steps you took to develop and test the proposed detection methods.
+
+Detection methods should be evaluated both empirically and theoretically.
+Empirically, you may carry out the evaluation mainly on the available data, but feel free (not mandatory) to extend the evaluation beyond this, e.g., by testing the ability of the method to detect variations of the attack, or by testing the detection method on other datasets. 
+Make sure you use proper metrics to evaluate the effectiveness of the detection method, and interpret the metrics by taking into account contextual information of the dataset on which they are calculated. Theoretically, you may evaluate the detection method beyond the available data by relating the detection methods to characteristics of typical environments.
+The advantages and disadvantages of the proposed detection methods should be discussed, alongside alternatives to justify why your approach is (or is not) viable given potential alternatives.
+
+
+
+\subsection{Detection Method 1}
+Present each proposed detection method (motivation, characteristic, and rule/implementation) and evaluate them individually.
+
+
+\subsection{Detection Method \ldots}
+If \textbf{optionally}, during your project, you decide to use another detection method, you can report why that decision was taken based on the type of attack/situation. You may briefly report it chronologically and explain why the first method was not or would not be successful/optional, and why you decided to go with the new method.
+
+\ldots
+
+\section{Mitigation and protection}
+\textbf{Optionally}, you can add relevant details as you see fit.
+For instance, suppose we want to prevent the incident from happening in the first place: How would you advise organisations and individuals to mitigate the threat? If an incident is detected, how would you recommend they eradicate the threat or otherwise respond?
+
+\section{Discussion} \label{section: discussion}
+
+The discussion is \textbf{optional}, and you may optionally choose to include it.
+
+\subsection{Investigation}
+Here you may cover topics such as: what you learnt from the investigation process, what (techniques/approaches) worked well and what were less successful, and what you would have done differently if you were to do it all over again.
+
+\subsection{Detection Method Development and Evaluation}
+Here you may discuss the same topics as for the Investigation section, but covering the detection method development and evaluation.
+
+\subsection{Future opportunities}
+How can others benefit from your report in related contexts and how would you further contribute to the detection and mitigation of related incidents if you were to continue?
+
+\section{Conclusion} \label{section: conclusion}
+Summarise the outcome of the investigation and the development of detection methods. Moreover, put your conclusions into a broader context.

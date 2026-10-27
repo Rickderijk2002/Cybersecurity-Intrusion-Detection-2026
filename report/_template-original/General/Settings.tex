@@ -1,0 +1,89 @@
+% Give your report a title
+\newcommand\reporttitle{Report Example (Change this title in General/Settings.tex)}
+
+% Insert course code, name, quartile number and year (or any other subtitle)
+\newcommand\reportsubtitle{
+JM2030 - Cybersecurity \\ \textbf{Intrusion Detection Report}
+}
+
+% Add your group number (for DBL) or any other text.
+\newcommand\groupnumber{
+\textbf{Group xx}
+}
+
+% Insert authors and student numbers here
+\newcommand\reportauthors{
+Name Surname & Student number \\
+Copy me & Copy me \\
+}
+
+% Add the name of your tutor (for DBL) or any other text.
+\newcommand\grouptutor{
+% Tutor: Name Surname
+}
+
+% Date and location (default: current date and Eindhoven)
+\newcommand\placeanddate{
+'s-Hertogenbosch, \today
+}
+
+% Define JADS-colour (color of the TU/e logo). Can be changed to drastically change the look of the template
+\definecolor{JADS-colour}{RGB}{126,59,52}
+
+% All of the following code can be removed to be left with (close to) default LaTeX behaviour. 
+
+% Sets up hyperlinks in the document to be colored
+\hypersetup{
+    colorlinks=true,
+    linkcolor=JADS-colour,
+    urlcolor=JADS-colour,
+    citecolor = JADS-colour
+    }
+\urlstyle{same} % Defines settings for link and reference formatting
+
+
+% Change bullet style for level 1, 2 and 3 respectively for itemize
+\renewcommand{\labelitemi}{\scriptsize\textcolor{JADS-colour}{$\blacksquare$}}% level 1
+\renewcommand{\labelitemii}{\scriptsize\textcolor{JADS-colour}{$\square$}}% level 2
+\renewcommand{\labelitemiii}{\textcolor{JADS-colour}{$\circ$}}% level 3
+
+% \renewcommand{\labelitemi}{\small\textcolor{JADS-colour}{\ding{70}}} % level 1
+% \renewcommand{\labelitemii}{\small\textcolor{JADS-colour}{\ding{71}}}% level 2
+% \renewcommand{\labelitemiii}{\tiny\textcolor{JADS-colour}{\ding{71}}}% level 3
+
+% Change bullet style for level 1, 2 and 3 respectively for enumerate
+\renewcommand{\labelenumi}{\textbf{\textcolor{JADS-colour}{\arabic*.}}}% level 1
+\renewcommand{\labelenumii}{\textbf{\textcolor{JADS-colour}{[\alph*]}}}% level 2
+\renewcommand{\labelenumiii}{\textbf{\textcolor{JADS-colour}{\roman*.}}}% level 3
+
+% Have reference labels be linked to section (section 3 will have fig. 3.1 etc.)
+\counterwithin{equation}{section} % For equations
+\counterwithin{figure}{section} % For figures
+\counterwithin{table}{section} % For tables
+
+% Creates a beautiful header/footer
+\pagestyle{fancy}
+\lhead{\includegraphics[height = 8pt]{Figures/0. General/jads_logo.png}}
+\rhead{\reporttitle}
+\renewcommand{\footrulewidth}{0.4pt}
+\cfoot{Page \thepage}
+
+% Formats section, subsection and subsubsection titles respectively 
+\titleformat{\section}{\sffamily\color{JADS-colour}\Large\bfseries}{\thesection\enskip\color{gray}\textbar\enskip}{0cm}{} % Formats section titles
+
+\titleformat{\subsection}{\sffamily\color{JADS-colour}\large\bfseries}{\thesubsection\enskip\color{gray}\textbar\enskip}{0cm}{} % Formats subsection titles
+
+\titleformat{\subsubsection}{\sffamily\color{JADS-colour}\bfseries}{\thesubsubsection\enskip\color{gray}\textbar\enskip}{0cm}{} % Formats subsubsection titles
+
+% Formats captions
+\DeclareCaptionFont{JADS-colour}{\color{JADS-colour}}
+\captionsetup{labelfont={JADS-colour,bf}}
+
+ % Changes font to mlmodern
+\usepackage{mlmodern}
+
+% Removes indent when starting a new paragraph
+\setlength\parindent{0pt}
+
+% Limits the ToC to sections and subsections (no subsubsec.)
+\setcounter{tocdepth}{2}

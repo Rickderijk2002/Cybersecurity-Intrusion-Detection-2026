@@ -1,0 +1,73 @@
+% Visual identity of the JADS report template, ported from General/Preamble.tex and
+% General/Settings.tex of the original LaTeX template. Quarto already loads hyperref,
+% xcolor, geometry, graphicx and booktabs, so those are not repeated here.
+
+\usepackage{amsmath, amsthm, amssymb, amsfonts}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[shortlabels]{enumitem}
+\usepackage{lscape}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{calc}
+\usepackage{mlmodern}
+
+% Coordinate helper used by the title page
+\makeatletter
+\newcommand{\gettikzxy}[3]{%
+  \tikz@scan@one@point\pgfutil@firstofone#1\relax
+  \edef#2{\the\pgf@x}%
+  \edef#3{\the\pgf@y}%
+}
+\makeatother
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=JADS-colour,
+    urlcolor=JADS-colour,
+    citecolor=JADS-colour
+}
+\urlstyle{same}
+
+% Bullets
+\renewcommand{\labelitemi}{\scriptsize\textcolor{JADS-colour}{$\blacksquare$}}
+\renewcommand{\labelitemii}{\scriptsize\textcolor{JADS-colour}{$\square$}}
+\renewcommand{\labelitemiii}{\textcolor{JADS-colour}{$\circ$}}
+\renewcommand{\labelenumi}{\textbf{\textcolor{JADS-colour}{\arabic*.}}}
+\renewcommand{\labelenumii}{\textbf{\textcolor{JADS-colour}{[\alph*]}}}
+\renewcommand{\labelenumiii}{\textbf{\textcolor{JADS-colour}{\roman*.}}}
+
+% Numbering tied to the section
+\counterwithin{equation}{section}
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\includegraphics[height = 8pt]{template/figures/jads_logo.png}}
+\rhead{\reporttitle}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\cfoot{Page \thepage}
+
+% Section titles
+\titleformat{\section}{\sffamily\color{JADS-colour}\Large\bfseries}{\thesection\enskip\color{gray}\textbar\enskip}{0cm}{}
+\titleformat{\subsection}{\sffamily\color{JADS-colour}\large\bfseries}{\thesubsection\enskip\color{gray}\textbar\enskip}{0cm}{}
+\titleformat{\subsubsection}{\sffamily\color{JADS-colour}\bfseries}{\thesubsubsection\enskip\color{gray}\textbar\enskip}{0cm}{}
+
+% Captions
+\DeclareCaptionFont{JADS-colour}{\color{JADS-colour}}
+\captionsetup{labelfont={JADS-colour,bf}}
+
+\setlength\parindent{0pt}
+\setlength{\parskip}{0.6em}
+\setcounter{tocdepth}{2}
+
+% Alternating row shading for tables, in the house colour
+\rowcolors{2}{JADS-colour!8}{white}

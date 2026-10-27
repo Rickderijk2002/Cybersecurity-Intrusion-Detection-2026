@@ -1,0 +1,22 @@
+\begin{landscape}
+    \section{Appendix A Atomic Indicators of Compromise} \label{section: appendix A titleAtomic Indicators of Compromise}
+    It is reasonably common for these types of reports in industry, such as \cite{coathanger} and \cite{vmware-esxi-ransomware}, to be accompanied by a table containing a list of atomic Indicators of Compromise (IoC). By this, we refer to network addresses (IP, MAC, Domain names, email addresses, JA3, HASSH), file identifiers (filename, file location, MD5, SHA1, SHA256), etc. Inclusion is best done in a tabular format, like the one below.
+    \begin{table}[ht]
+    \rowcolors{2}{Tue-red!10}{white}
+    \centering
+    \caption{File hashes for the identified files associated with the malware infection.}
+    \begin{tabular}[t]{ccccc}
+    \toprule
+    \color{Tue-red}\textbf{Filename}&\color{Tue-red}\textbf{Hash type}&\color{Tue-red}\textbf{Hash value}\\
+    \midrule
+    Adamx\_Tweaking\_Utility\_Version\_10.04.23.exe&MD5&243c0655be95227b8295be97789feb97\\
+    Adamx\_Tweaking\_Utility\_Version\_10.04.23.exe&SHA1&a356795526b56cac6cdb7130586ec58955c2cc20\\
+    Adamx\_Tweaking\_Utility\_Version\_10.04.23.exe&SHA256&a3b7ca2eedb0fc1c76c48264a0c863e9cda615d5d41adbc7a16360e6d407f738\\
+    \bottomrule
+    \end{tabular}
+    \label{table: style 1}
+    \end{table}
+\end{landscape}
+
+\section{Appendix B title} \label{section: appendix B title}
+In the appendix, you can add any figures that are irrelevant to understanding the report's main sections. For example, certain figures that occupy too much space can be put here.
