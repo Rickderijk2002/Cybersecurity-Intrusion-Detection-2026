@@ -32,3 +32,5 @@ report/.quarto/
 .DS_Store
 Thumbs.db
 ~$*
+
+report/report.tex
