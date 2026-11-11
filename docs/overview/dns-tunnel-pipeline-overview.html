@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DNS tunnel detection: data pipeline overview</title>
+<style>
+:root{--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--surface-1:#f3f2ee;--surface-2:#ffffff;--border:#e1e0d9;--radius:8px;
+--font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@page{size:A4;margin:12mm 12mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{zoom:.86;margin:0 auto;max-width:720px;padding:18px;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--text-primary);background:#fff;font-size:14px;line-height:1.6}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+h3{font-size:16px;font-weight:500;margin:1.6rem 0 .5rem;break-after:avoid}
+p{margin:0 0 .5rem;font-size:14px;line-height:1.6;color:var(--text-secondary)}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.card{background:var(--surface-2);border:.5px solid #cfcdc4;border-radius:12px;padding:12px 14px;break-inside:avoid}
+.card b{display:block;font-weight:500;font-size:14px;color:var(--text-primary);margin-bottom:4px}
+.card span{font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.stats{grid-template-columns:repeat(4,1fr)}
+.stat{background:var(--surface-1);border-radius:var(--radius);padding:12px 14px;break-inside:avoid}
+.stat i{display:block;font-style:normal;font-size:12px;color:var(--text-secondary)}
+.stat b{font-size:22px;font-weight:500;color:var(--text-primary)}
+code{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);padding:1px 5px;border-radius:4px;color:var(--text-primary)}
+.flow{display:flex;align-items:stretch;gap:6px;break-inside:avoid}.flow .card{flex:1;padding:10px 12px}.flow .ar{align-self:center;color:var(--text-muted);font-size:18px;font-style:normal}
+.lg{display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin:0 0 4px;break-after:avoid}.lg s{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;text-decoration:none}
+pre{margin:0;background:var(--surface-1);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text-primary);overflow-x:auto;break-inside:avoid}
+ol,ul{margin:0;padding-left:1.2rem;font-size:14px;line-height:1.7;color:var(--text-secondary)}
+section{break-inside:avoid}
+svg{display:block;break-inside:avoid;font-family:inherit}
+.foot{margin-top:2rem;font-size:11px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Overview of the DNS tunnel data pipeline.</h2>
+<h1>DNS tunnel detection: data pipeline</h1>
+<p>One capture of normal DNS plus a hidden tunnel session. The pipeline prepares it for an Isolation Forest. JM2030 Cybersecurity, Group 3, case 1.</p>
+<div class="grid stats" style="margin:.75rem 0 0">
+<div class="stat"><i>DNS queries</i><b>3,645</b></div>
+<div class="stat"><i>Duration</i><b>95 min</b></div>
+<div class="stat"><i>Tunnel session (shown twice)</i><b>1</b></div>
+<div class="stat"><i>Features</i><b>8</b></div>
+</div>
+
+<section>
+<h3>The capture, minute by minute</h3>
+<div class="lg"><span><s style="background:#2a78d6"></s>Benign</span><span><s style="background:#eb6834"></s>Tunnel</span></div>
+<svg id="c1" width="100%" viewBox="0 0 680 220" role="img"><title>Queries per minute</title></svg>
+<p>The tunnel session was recorded twice. Copy 2 is an exact replay of copy 1. Benign traffic is quiet, with two busy periods.</p>
+
+</section>
+<section>
+<h3>How the pipeline runs</h3>
+<div class="flow">
+<div class="card"><b>dns.log + labels</b><span>3,645 rows, joined by row_id</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>prepare.py</b><span>Wire-byte names, parent domain, one tunnel copy, split</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>features.py</b><span>8 numeric features per query, causal</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>models</b><span>Isolation Forest and baselines</span></div>
+</div>
+
+</section>
+<section>
+<h3>The setup and why</h3>
+<div class="grid">
+<div class="card"><b>Keep one tunnel copy</b><span>Copy 2 matches copy 1 byte for byte. Keeping both doubles the positives and makes copy 2 look like repeated names.</span></div>
+<div class="card"><b>Default keeps copy 2 (18:50)</b><span>It sits inside busy period 2, the harder test. Training can then include busy period 1.</span></div>
+<div class="card"><b>Cut at 18:30</b><span>Middle of the quiet gap. Train: 1,592 benign rows, no tunnel. Test: 1,609 benign + 222 tunnel.</span></div>
+</div>
+<p style="margin-top:.5rem">Strict variant: keep copy 1, cut at 18:04:36. Training is only 244 quiet rows, so it mostly shows what a load change does.</p>
+
+</section>
+<section>
+<h3>Why the context features work</h3>
+<div class="lg"><span><s style="background:#2a78d6"></s>Benign</span><span><s style="background:#eb6834"></s>Tunnel</span></div>
+<svg id="c2" width="100%" viewBox="0 0 680 190" role="img"><title>Unique names per minute</title></svg>
+<p>Highest <code>uniq_names_60s</code> per minute (default run). The session straddles two minute bins, so the first shows 26 although the rolling count reaches 222.</p>
+
+</section>
+<section>
+<h3>The 8 features</h3>
+<div class="grid">
+<div class="card"><b>Name shape (3)</b><span><code>name_bytes</code> <code>longest_label</code> <code>entropy</code><br>Data travels in the name: long, random-looking. Catches data and probe queries, not pings.</span></div>
+<div class="card"><b>Domain context (4)</b><span><code>uniq_names_60s</code> <code>uniq_ratio_60s</code> <code>norepeat_evidence</code> <code>log_cum_uniq</code><br>Caching forces a new name per query. Catches the whole session.</span></div>
+<div class="card"><b>Record type (1)</b><span><code>data_qtype</code><br>NULL or TXT flag. An on/off ablation switch.</span></div>
+</div>
+<p style="margin-top:.5rem">Left out on purpose: IPs, ports, flags, TTL, EDNS0, rtt, NXDOMAIN, raw volume, domain names. They separate the classes only because of the lab.</p>
+
+</section>
+<section>
+<h3>Running it</h3>
+<pre>python main.py                      default: copy 2, cut 18:30, 60 s window
+python main.py --all --tests        default + strict variant, then the checks
+python main.py --window 60 300 900  several window sizes (slow tunnels)
+python main.py --session first      only copy 1</pre>
+<p style="margin-top:.5rem">Start with <code>data/processed/features.csv</code>. Columns: <code>split</code> (train/test), <code>y</code> (label), 8 features. Features are raw, not scaled.</p>
+
+</section>
+<section>
+<h3>Suggested modelling</h3>
+<ol>
+<li>Fit Isolation Forest on the <code>forced</code> features, training rows only.</li>
+<li>Threshold from the training scores (Tukey), no labels needed.</li>
+<li>Evaluate on test: precision, recall, F1, recall per phase, false positives.</li>
+<li>Compare with simple baselines, then stress tests: window size, strict variant, slow tunnel.</li>
+</ol>
+
+</section>
+<section>
+<h3>Limits to state</h3>
+<ul>
+<li>One tunnel session, one tool, one benign client.</li>
+<li>The tunnel is loud, so results will look strong. Slow tunnels are the real test.</li>
+<li>The first dozen tunnel queries look benign. 6.5% of rows are tunnel, so precision is optimistic.</li>
+</ul>
+</section>
+<div class="foot">Generated 2026-11-11 from data/processed and the notebooks 02 and 03. See docs/data_dictionary.md and docs/handoff-2026-11-11-pipeline.md for details.</div>
+
+<script>
+const BEN=[3,5,10,6,5,9,23,10,10,10,2,9,7,2,3,11,6,22,5,4,6,9,8,4,1,3,8,13,5,26,8,41,11,19,76,50,452,551,6,12,2,5,14,8,13,5,5,8,9,12,5,12,10,10,3,2,7,13,1,5,4,0,5,4,2,0,16,12,20,0,4,10,9,2,19,598,337,415,18,11,0,9,16,6,23,2,3,4,3,10,0,4,8,2,3,2];
+const TUN=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,221,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26,196,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+const BMX=[1,1,3,1,1,2,4,2,2,4,1,1,1,1,1,2,1,2,1,1,1,2,1,1,1,1,3,1,1,2,2,3,2,2,16,3,10,12,1,2,1,1,3,1,1,2,1,2,2,2,2,2,2,3,1,1,1,1,1,1,2,0,1,1,1,0,1,2,2,0,1,1,2,1,4,27,28,16,2,2,0,2,3,1,3,1,1,1,1,2,0,1,1,1,1,1];
+const TMX=BEN.map((_,i)=>i==75?26:i==76?222:0);
+const BC='#2a78d6',TC='#eb6834',W=680,L=38,R=10,T=14,B=26,N=96,BW=(W-L-R)/N,X=i=>L+i*BW;
+function axes(H,ymax,ticks){const Y=v=>T+(H-T-B)*(1-v/ymax);let s='';
+ticks.forEach(t=>{s+=`<line x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e1e0d9" stroke-width="0.5"/><text x="${L-6}" y="${Y(t)}" text-anchor="end" dominant-baseline="central" font-size="11" fill="#898781">${t}</text>`});
+for(let i=0;i<N;i++){const m=35+i;if(m%15==0){const hh=Math.floor((17*60+m)/60),mm=(17*60+m)%60;s+=`<text x="${X(i)+BW/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="#898781">${hh}:${String(mm).padStart(2,'0')}</text>`}}
+return {s,Y}}
+(function(){const H=220,{s,Y}=axes(H,650,[0,200,400,600]);let o=s;
+o+=`<rect x="${X(55)}" y="${T}" width="${W-R-X(55)}" height="${H-T-B}" fill="rgba(128,128,128,0.08)"/><line x1="${X(55)}" x2="${X(55)}" y1="${T}" y2="${H-B}" stroke="#898781" stroke-width="1" stroke-dasharray="4 3"/>`;
+o+=`<text x="${X(55)-6}" y="${T+9}" text-anchor="end" font-size="11" fill="#52514e">train</text><text x="${X(55)+6}" y="${T+9}" font-size="11" fill="#52514e">test (cut 18:30)</text>`;
+for(let i=0;i<N;i++){let a=0;[[BEN[i],BC],[TUN[i],TC]].forEach(([v,c])=>{if(v>0){o+=`<rect x="${X(i)+.5}" y="${Y(a+v)}" width="${BW-1}" height="${Math.max(Y(a)-Y(a+v),1)}" fill="${c}"/>`;a+=v}})}
+o+=`<text x="${X(29)-6}" y="${Y(250)}" text-anchor="end" font-size="11" fill="#52514e">tunnel copy 1</text><text x="${X(29)-6}" y="${Y(250)+13}" text-anchor="end" font-size="11" fill="#898781">(removed)</text>`;
+o+=`<text x="${X(37)+BW/2}" y="${Y(551)-6}" text-anchor="middle" font-size="11" fill="#52514e">busy period 1</text>`;
+o+=`<text x="${X(74)}" y="${Y(560)}" text-anchor="end" font-size="11" fill="#52514e">busy period 2</text>`;
+o+=`<text x="${X(79)}" y="${Y(330)}" font-size="11" fill="#52514e">tunnel copy 2</text><text x="${X(79)}" y="${Y(330)+13}" font-size="11" fill="#898781">(kept)</text>`;
+document.getElementById('c1').insertAdjacentHTML('beforeend',o)})();
+(function(){const H=190,{s,Y}=axes(H,240,[0,50,100,150,200]);let o=s;
+o+=`<line x1="${L}" x2="${W-R}" y1="${Y(30)}" y2="${Y(30)}" stroke="#52514e" stroke-width="1" stroke-dasharray="4 3"/><text x="${X(2)}" y="${Y(30)-6}" font-size="11" fill="#52514e">30</text>`;
+const w=BW*.42;for(let i=0;i<N;i++){if(BMX[i]>0)o+=`<rect x="${X(i)+.5}" y="${Y(BMX[i])}" width="${w}" height="${Y(0)-Y(BMX[i])}" fill="${BC}"/>`;if(TMX[i]>0)o+=`<rect x="${X(i)+.5+w}" y="${Y(TMX[i])}" width="${w}" height="${Y(0)-Y(TMX[i])}" fill="${TC}"/>`}
+o+=`<text x="${X(76)+BW/2}" y="${Y(222)-6}" text-anchor="middle" font-size="11" fill="#52514e">222</text><text x="${X(74)}" y="${Y(28)-10}" text-anchor="end" font-size="11" fill="#52514e">benign max 28</text>`;
+document.getElementById('c2').insertAdjacentHTML('beforeend',o)})();
+</script>
+</body>
+</html>

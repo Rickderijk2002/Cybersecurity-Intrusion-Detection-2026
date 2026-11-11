@@ -1,6 +1,8 @@
 # Data: large and potentially sensitive, downloaded from Canvas
 data/raw/*
 !data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 *.pcap
 *.pcapng
 *.cap
