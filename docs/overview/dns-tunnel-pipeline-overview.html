@@ -28,18 +28,20 @@ pre{margin:0;background:var(--surface-1);border-radius:var(--radius);padding:10p
 ol,ul{margin:0;padding-left:1.2rem;font-size:14px;line-height:1.7;color:var(--text-secondary)}
 section{break-inside:avoid}
 svg{display:block;break-inside:avoid;font-family:inherit}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;break-inside:avoid}.tbl th{font-weight:500;text-align:left;color:var(--text-secondary);border-bottom:.5px solid #cfcdc4;padding:4px 8px 4px 0}.tbl td{padding:4px 8px 4px 0;border-bottom:.5px solid var(--border);color:var(--text-secondary)}.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.ref td,.ref th{font-size:12px;vertical-align:top;padding:5px 8px 5px 0}.ref td:first-child{white-space:nowrap}.ref tr{break-inside:avoid}.ref tr.grp code{text-transform:none;letter-spacing:0}section.ref-sec{break-inside:auto}.tbl.ref{break-inside:auto}.ref tr.grp{break-after:avoid}.ref-sec>p{break-after:avoid}.ref tr.grp td{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding-top:10px;border-bottom:.5px solid #cfcdc4}
+.tbl tr.hl td{color:var(--text-primary);font-weight:500}
 .foot{margin-top:2rem;font-size:11px;color:var(--text-muted)}
 </style>
 </head>
 <body>
 <h2 class="sr-only">Overview of the DNS tunnel data pipeline.</h2>
 <h1>DNS tunnel detection: data pipeline</h1>
-<p>One capture of normal DNS plus a hidden tunnel session. The pipeline prepares it for an Isolation Forest. JM2030 Cybersecurity, Group 3, case 1.</p>
+<p>One capture of normal DNS plus a hidden tunnel session. The pipeline prepares it for an Isolation Forest, and the notebooks record why the feature set looks the way it does. JM2030 Cybersecurity, Group 3, case 1.</p>
 <div class="grid stats" style="margin:.75rem 0 0">
 <div class="stat"><i>DNS queries</i><b>3,645</b></div>
 <div class="stat"><i>Duration</i><b>95 min</b></div>
 <div class="stat"><i>Tunnel session (shown twice)</i><b>1</b></div>
-<div class="stat"><i>Features</i><b>8</b></div>
+<div class="stat"><i>Default features</i><b>4</b></div>
 </div>
 
 <section>
@@ -54,9 +56,10 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 <div class="flow">
 <div class="card"><b>dns.log + labels</b><span>3,645 rows, joined by row_id</span></div><i class="ar">&rarr;</i>
 <div class="card"><b>prepare.py</b><span>Wire-byte names, parent domain, one tunnel copy, split</span></div><i class="ar">&rarr;</i>
-<div class="card"><b>features.py</b><span>8 numeric features per query, causal</span></div><i class="ar">&rarr;</i>
-<div class="card"><b>models</b><span>Isolation Forest and baselines</span></div>
+<div class="card"><b>features.py</b><span>4 default features per query, per client and domain, causal</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>models</b><span>Isolation Forest and baselines (next step)</span></div>
 </div>
+<p style="margin-top:.5rem"><code>src/variants.py</code> builds stress-test versions of the data (slower tunnel, more benign hosts, a repeated name) that go through the same feature code. 30 acceptance tests cover all three modules.</p>
 
 </section>
 <section>
@@ -64,6 +67,7 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 <div class="grid">
 <div class="card"><b>Keep one tunnel copy</b><span>Copy 2 matches copy 1 byte for byte. Keeping both doubles the positives and makes copy 2 look like repeated names.</span></div>
 <div class="card"><b>Default keeps copy 2 (18:50)</b><span>It sits inside busy period 2, the harder test. Training can then include busy period 1.</span></div>
+<div class="card"><b>Count per client and domain</b><span>The context features ask: how many names did this machine ask this domain? Same values here (one benign client); correct for networks with many hosts.</span></div>
 <div class="card"><b>Cut at 18:30</b><span>Middle of the quiet gap. Train: 1,592 benign rows, no tunnel. Test: 1,609 benign + 222 tunnel.</span></div>
 </div>
 <p style="margin-top:.5rem">Strict variant: keep copy 1, cut at 18:04:36. Training is only 244 quiet rows, so it mostly shows what a load change does.</p>
@@ -77,13 +81,60 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 
 </section>
 <section>
-<h3>The 8 features</h3>
+<h3>The features</h3>
 <div class="grid">
-<div class="card"><b>Name shape (3)</b><span><code>name_bytes</code> <code>longest_label</code> <code>entropy</code><br>Data travels in the name: long, random-looking. Catches data and probe queries, not pings.</span></div>
-<div class="card"><b>Domain context (4)</b><span><code>uniq_names_60s</code> <code>uniq_ratio_60s</code> <code>norepeat_evidence</code> <code>log_cum_uniq</code><br>Caching forces a new name per query. Catches the whole session.</span></div>
-<div class="card"><b>Record type (1)</b><span><code>data_qtype</code><br>NULL or TXT flag. An on/off ablation switch.</span></div>
+<div class="card"><b>Default: domain context (3)</b><span><code>uniq_names_60s</code> <code>uniq_ratio_60s</code> <code>norepeat_tol</code><br>Caching forces a new name per query. A 60 s window plus a long memory that survives a repeated name. Catches the whole session, pings included.</span></div>
+<div class="card"><b>Default: name shape (1)</b><span><code>name_bytes</code><br>Data travels in the name, so names are long. Catches data and probe queries, not pings. One feature on purpose: the three shape features correlate about 0.8.</span></div>
+<div class="card"><b>Ablation columns (5)</b><span><code>longest_label</code> <code>entropy</code> redundant with <code>name_bytes</code>. <code>norepeat_evidence</code> breaks on one repeated name. <code>log_cum_uniq</code> drifts with time. <code>data_qtype</code> (NULL or TXT) is iodine specific.</span></div>
 </div>
 <p style="margin-top:.5rem">Left out on purpose: IPs, ports, flags, TTL, EDNS0, rtt, NXDOMAIN, raw volume, domain names. They separate the classes only because of the lab.</p>
+
+</section>
+<section class="ref-sec">
+<h3>All features at a glance</h3>
+<p>Every feature column in <code>features.csv</code>. Median (max) is over the whole default run: benign against tunnel. Row = the characteristic in report Table 2.5 that the feature targets. "Per pair" means counted per client and parent domain, using only queries up to and including the current one.</p>
+<table class="tbl ref">
+<thead><tr><th>Feature</th><th>Row</th><th>What it is exactly</th><th class="n">Benign / tunnel</th></tr></thead>
+<tr class="grp"><td colspan="4">Default set (<code>feature_sets(60)["forced"]</code>)</td></tr>
+<tr class="hl"><td><code>name_bytes</code></td><td>2</td><td>Length of the full query name in bytes as sent on the wire (Zeek's <code>\xNN</code> escapes count as one byte).</td><td class="n">20 (103) / 19 (252)</td></tr>
+<tr class="hl"><td><code>uniq_names_60s</code></td><td>1</td><td>Distinct names this client asked this parent domain in the last 60 s, current query included. Per pair.</td><td class="n">1 (28) / 111.5 (222)</td></tr>
+<tr class="hl"><td><code>uniq_ratio_60s</code></td><td>1</td><td><code>uniq_names_60s</code> divided by the number of queries in that same window. 1.0 means no name was repeated in the window.</td><td class="n">0.40 (1.0) / 1.0 (1.0)</td></tr>
+<tr class="hl"><td><code>norepeat_tol</code></td><td>1</td><td><code>log(1 + d) &times; d / n</code>, with <code>d</code> distinct names and <code>n</code> queries so far. Long memory; one repeated name barely changes it. Per pair.</td><td class="n">0.40 (2.05) / 4.72 (5.41)</td></tr>
+<tr class="grp"><td colspan="4">Ablation columns (<code>extra</code>), not in the default</td></tr>
+<tr><td><code>longest_label</code></td><td>2</td><td>Length in bytes of the longest label in the name (DNS limit 63). Correlates 0.80 with <code>name_bytes</code>.</td><td class="n">9 (57) / 8 (62)</td></tr>
+<tr><td><code>entropy</code></td><td>3</td><td>Shannon entropy in bits per character of the subdomain, dots included; 0 if there is none. Correlates 0.80 with <code>name_bytes</code>.</td><td class="n">2.50 (4.53) / 2.75 (6.30)</td></tr>
+<tr><td><code>norepeat_evidence</code></td><td>1</td><td><code>log(1 + d)</code> while the pair has never asked the same name twice, else 0. Switched off for good by one repeat. Per pair.</td><td class="n">0 (1.61) / 4.72 (5.41)</td></tr>
+<tr><td><code>log_cum_uniq</code></td><td>1</td><td><code>log(1 + d)</code>: distinct names the pair has asked so far. Grows with time since the capture started, so it drifts. Per pair.</td><td class="n">1.39 (3.58) / 4.72 (5.41)</td></tr>
+<tr class="grp"><td colspan="4">Optional</td></tr>
+<tr><td><code>data_qtype</code></td><td>5</td><td>1 if the record type is NULL (10) or TXT (16), else 0. Part of <code>full</code> only. NULL is iodine's choice.</td><td class="n">0 (0) / 1 (1)</td></tr>
+</table>
+<p style="margin-top:.5rem">All features are numeric and raw (not scaled). These columns are metadata, never features: <code>ts</code> <code>label</code> <code>y</code> <code>split</code> <code>burst</code> <code>is_replay</code> <code>phase</code> <code>parent</code> <code>client</code>. Full definitions: <code>docs/data_dictionary.md</code>.</p>
+
+</section>
+<section>
+<h3>Why this feature set</h3>
+<p>Isolation Forest fitted on benign training rows, PR AUC on the test rows (mean of 10 seeds, threshold-free). Primary = tunnel copy 2; strict = copy 1 with only 244 training rows. One tunnel event, so read the direction, not the decimals.</p>
+<table class="tbl">
+<tr><th>Feature set</th><th class="n">Primary</th><th class="n">Strict</th></tr>
+<tr><td>Context only</td><td class="n">0.993</td><td class="n">0.985</td></tr>
+<tr class="hl"><td>Default: <code>name_bytes</code> + context</td><td class="n">0.993</td><td class="n">0.974</td></tr>
+<tr><td>Default + <code>entropy</code></td><td class="n">0.993</td><td class="n">0.870</td></tr>
+<tr><td>Default + <code>longest_label</code></td><td class="n">0.993</td><td class="n">0.809</td></tr>
+<tr><td>All three shape features + context</td><td class="n">0.975</td><td class="n">0.658</td></tr>
+<tr><td>Default without <code>norepeat_tol</code></td><td class="n">0.969</td><td class="n">0.533</td></tr>
+<tr><td>Default + <code>norepeat_evidence</code></td><td class="n">0.997</td><td class="n">0.991</td></tr>
+<tr><td>Default + <code>log_cum_uniq</code></td><td class="n">0.991</td><td class="n">0.887</td></tr>
+</table>
+<p style="margin-top:.5rem">More shape features rank worse because they are redundant and take splits from the context features. <code>norepeat_tol</code> carries the ranking. <code>norepeat_evidence</code> scores a little higher on clean data but one repeated name switches it off (see below), so it is an ablation. Details and figures: <code>notebooks/03_features.ipynb</code>.</p>
+
+</section>
+<section>
+<h3>Stress tests (simulated, built from this one capture)</h3>
+<div class="grid">
+<div class="card"><b>Slower tunnel</b><span>Up to 60 times slower (about 25 minutes). ROC AUC stays at 0.99 or higher; the default holds up better than context only at the slowest setting.</span></div>
+<div class="card"><b>More benign hosts</b><span>1 to 20 hosts. Default PR AUC 0.986 to 0.993; three shape features fall from 0.98 to 0.70. Per-client counting showed no benefit here: a design choice, not a result.</span></div>
+<div class="card"><b>One repeated name</b><span><code>norepeat_evidence</code> PR AUC 0.997 to 0.956. <code>norepeat_tol</code> stays at 0.993.</span></div>
+</div>
 
 </section>
 <section>
@@ -92,28 +143,29 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 python main.py --all --tests        default + strict variant, then the checks
 python main.py --window 60 300 900  several window sizes (slow tunnels)
 python main.py --session first      only copy 1</pre>
-<p style="margin-top:.5rem">Start with <code>data/processed/features.csv</code>. Columns: <code>split</code> (train/test), <code>y</code> (label), 8 features. Features are raw, not scaled.</p>
+<p style="margin-top:.5rem"><code>data/processed/</code> is not in git: run <code>python main.py</code> first (needs <code>data/raw/dns.log</code> from Canvas). Then start with <code>features.csv</code>. Columns: <code>split</code> (train/test), <code>y</code> (label), 4 default features plus 5 ablation columns. Features are raw, not scaled. Default set: <code>feature_sets(60)["forced"]</code>.</p>
 
 </section>
 <section>
 <h3>Suggested modelling</h3>
 <ol>
-<li>Fit Isolation Forest on the <code>forced</code> features, training rows only.</li>
-<li>Threshold from the training scores (Tukey), no labels needed.</li>
-<li>Evaluate on test: precision, recall, F1, recall per phase, false positives.</li>
-<li>Compare with simple baselines, then stress tests: window size, strict variant, slow tunnel.</li>
+<li>Fit Isolation Forest on the default features, training rows only.</li>
+<li>Choose the threshold without the test rows: a percentile on a benign validation slice. Tukey on the training scores is poorly calibrated here (about 170 benign rows flagged in the primary run), so treat it as a baseline.</li>
+<li>Evaluate on test: precision, recall, F1, recall per phase, event-level metrics (time to first alert), and look at the false positives.</li>
+<li>Compare with simple baselines (a rule on <code>uniq_names_60s</code> is strong) and one alternative model. Then the ablations, window sizes, other cuts and the variants.</li>
 </ol>
 
 </section>
 <section>
 <h3>Limits to state</h3>
 <ul>
-<li>One tunnel session, one tool, one benign client.</li>
-<li>The tunnel is loud, so results will look strong. Slow tunnels are the real test.</li>
-<li>The first dozen tunnel queries look benign. 6.5% of rows are tunnel, so precision is optimistic.</li>
+<li>One tunnel session, one tool, one benign client. The simulations are built from this one capture and show robustness, not generalisation.</li>
+<li>The tunnel is loud, so results will look strong. Slow and noisy variants are the real test.</li>
+<li>The first 28 tunnel queries (12%) stay within the benign range of <code>uniq_names_60s</code>. 6.5% of rows are tunnel, so precision is optimistic.</li>
+<li>The feature set is a starting point: <code>name_bytes</code> as the only shape feature rests on redundancy, and the numbers are mixed.</li>
 </ul>
 </section>
-<div class="foot">Generated 2026-11-11 from data/processed and the notebooks 02 and 03. See docs/data_dictionary.md and docs/handoff-2026-11-11-pipeline.md for details.</div>
+<div class="foot">Updated 2026-11-12 from data/processed and notebooks 02 and 03. See docs/phase2 - feature engineering overview.md (handoff) and docs/data_dictionary.md for details.</div>
 
 <script>
 const BEN=[3,5,10,6,5,9,23,10,10,10,2,9,7,2,3,11,6,22,5,4,6,9,8,4,1,3,8,13,5,26,8,41,11,19,76,50,452,551,6,12,2,5,14,8,13,5,5,8,9,12,5,12,10,10,3,2,7,13,1,5,4,0,5,4,2,0,16,12,20,0,4,10,9,2,19,598,337,415,18,11,0,9,16,6,23,2,3,4,3,10,0,4,8,2,3,2];
