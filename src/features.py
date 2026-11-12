@@ -3,7 +3,7 @@
 Usage:
     from src.features import make_matrix, load_matrix, feature_sets
     m = make_matrix()                     # session="second", cut 18:30, window 60 s, writes data/processed/features.csv
-    fs = feature_sets(60)                 # {"shape": [...], "context": [...], "qtype": [...], "forced": [...], "full": [...]}
+    fs = feature_sets(60)                 # {"shape", "context", "qtype", "forced", "full", "extra", "all"}
     train, test = m[m.split == "train"], m[m.split == "test"]
     X_train = train[fs["forced"]]
 
@@ -25,16 +25,26 @@ DATA_QTYPES = (10, 16)
 
 
 def feature_sets(window_s: int = 60) -> dict[str, list[str]]:
-    """Named column groups. Column names carry the window size, e.g. uniq_names_60s."""
-    shape = ["name_bytes", "longest_label", "entropy"]
-    context = [f"uniq_names_{window_s}s", f"uniq_ratio_{window_s}s", "norepeat_evidence", "log_cum_uniq"]
+    """Named column groups. Column names carry the window size, e.g. uniq_names_60s.
+
+    Default (`forced`, `full`) = tool-independent, non-redundant features only. `extra` holds the columns kept
+    for ablations: `longest_label` and `entropy` (correlated about 0.8 with `name_bytes`, so redundant; three
+    shape features crowd out the context features in Isolation Forest), `norepeat_evidence` (one repeated name
+    switches it off for good) and `log_cum_uniq` (grows with time since the start of the capture, so it
+    drifts). `all` = every feature column.
+    """
+    shape = ["name_bytes"]
+    context = [f"uniq_names_{window_s}s", f"uniq_ratio_{window_s}s", "norepeat_tol"]
     qtype = ["data_qtype"]
+    extra = ["longest_label", "entropy", "norepeat_evidence", "log_cum_uniq"]
     return {
         "shape": shape,
         "context": context,
         "qtype": qtype,
         "forced": shape + context,
         "full": shape + context + qtype,
+        "extra": extra,
+        "all": shape + context + qtype + extra,
     }
 
 
@@ -58,19 +68,22 @@ def _shape_features(prep: pd.DataFrame) -> pd.DataFrame:
 
 
 def _context_features(prep: pd.DataFrame, window_s: int) -> pd.DataFrame:
-    """One pass in time order. For each parent domain keep the names of the last `window_s` seconds
-    (window = (ts - window_s, ts], current query included) and every name seen so far."""
+    """One pass in time order. Everything is kept per (client, parent domain): one machine asking one domain.
+    For each pair keep the names of the last `window_s` seconds (window = (ts - window_s, ts], current query
+    included) and every name seen so far. `client` only splits the groups; it is never a feature."""
     n = len(prep)
-    uniq, ratio, cum, norepeat = np.empty(n), np.empty(n), np.empty(n), np.empty(n)
+    uniq, ratio, cum, norepeat, tol = (np.empty(n) for _ in range(5))
 
-    recent = defaultdict(deque)      # parent -> deque[(ts, name)] inside the window
-    in_window = defaultdict(Counter)  # parent -> name -> count inside the window
-    seen = defaultdict(set)          # parent -> every name asked so far
-    repeated = defaultdict(bool)     # parent -> has any name been asked twice so far?
+    recent = defaultdict(deque)      # key -> deque[(ts, name)] inside the window
+    in_window = defaultdict(Counter)  # key -> name -> count inside the window
+    seen = defaultdict(set)          # key -> every name asked so far
+    total = defaultdict(int)         # key -> number of queries so far
+    repeated = defaultdict(bool)     # key -> has any name been asked twice so far?
 
-    ts_all = prep["ts"].to_numpy()
-    for i, (ts, name, parent) in enumerate(zip(ts_all, prep["name"], prep["parent"])):
-        dq, counts = recent[parent], in_window[parent]
+    rows = zip(prep["ts"].to_numpy(), prep["name"], prep["client"], prep["parent"])
+    for i, (ts, name, client, parent) in enumerate(rows):
+        key = (client, parent)
+        dq, counts = recent[key], in_window[key]
         while dq and dq[0][0] <= ts - window_s:
             _, old = dq.popleft()
             counts[old] -= 1
@@ -79,18 +92,24 @@ def _context_features(prep: pd.DataFrame, window_s: int) -> pd.DataFrame:
         dq.append((ts, name))
         counts[name] += 1
 
-        if name in seen[parent]:
-            repeated[parent] = True
-        seen[parent].add(name)
+        if name in seen[key]:
+            repeated[key] = True
+        seen[key].add(name)
+        total[key] += 1
 
+        distinct = len(seen[key])
         uniq[i] = len(counts)
         ratio[i] = len(counts) / len(dq)
-        cum[i] = np.log1p(len(seen[parent]))
-        norepeat[i] = 0.0 if repeated[parent] else cum[i]
+        cum[i] = np.log1p(distinct)
+        norepeat[i] = 0.0 if repeated[key] else cum[i]
+        # repeat-tolerant: the same log, scaled by the share of queries so far that were new names.
+        # One repeat among 200 queries lowers it by 0.5% instead of setting it to 0.
+        tol[i] = cum[i] * distinct / total[key]
 
     return pd.DataFrame({
         f"uniq_names_{window_s}s": uniq,
         f"uniq_ratio_{window_s}s": ratio,
+        "norepeat_tol": tol,
         "norepeat_evidence": norepeat,
         "log_cum_uniq": cum,
     }, index=prep.index)
@@ -155,4 +174,4 @@ if __name__ == "__main__":
         m = make_matrix(session=session)
         fs = feature_sets(60)
         print(f"session={session}: {m.shape[0]} rows, wrote {matrix_path(session, 60).relative_to(ROOT)}")
-        print(drift_table(m, fs["full"]), "\n")
+        print(drift_table(m, fs["all"]), "\n")

@@ -35,7 +35,7 @@ def run(session: str, windows: list[int], cut: str | None, raw: pd.DataFrame) ->
         fs = feature_sets(window_s)
         print(f"\nfeatures (window {window_s} s): {m.shape[0]} rows x {m.shape[1]} columns -> {path.relative_to(ROOT)}")
         print("test benign rows above the training maximum, per feature:")
-        print(drift_table(m, fs["full"])[["train max", "test benign max", "test benign above train max"]].to_string())
+        print(drift_table(m, fs["all"])[["train max", "test benign max", "test benign above train max"]].to_string())
 
 
 def main() -> int:
@@ -59,7 +59,7 @@ def main() -> int:
     if args.tests:
         print("\n=== tests ===")
         code = 0
-        for test in ("tests/test_prepare.py", "tests/test_features.py"):
+        for test in ("tests/test_prepare.py", "tests/test_features.py", "tests/test_variants.py"):
             code |= subprocess.run([sys.executable, str(ROOT / test)], cwd=ROOT).returncode
         return code
     return 0

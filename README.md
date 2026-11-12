@@ -5,7 +5,7 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 - **Due:** 5 Dec 2026, 23:59 (upload as one zip). **Presentation:** 30 Nov or 1 Dec
 - **Case:** Case 1, DNS tunnelling (see `docs/Case and technique.md`)
 - **Technique:** Isolation Forest
-- **Start here:** the newest `docs/handoff-*.md`
+- **Start here (modelling):** `docs/phase2 - feature engineering overview.md`, then `docs/data_dictionary.md` and `notebooks/03_features.ipynb`
 - **Brief and grading criteria:** `assignment/Assignment brief.md`
 
 ## Layout
@@ -14,8 +14,8 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 |---|---|
 | `assignment/` | The Canvas brief and rubric, copied verbatim |
 | `data/raw/` | PCAP and `dns.log`. **Git-ignored**, download from Canvas |
-| `src/` | Python modules: feature extraction, detectors, evaluation |
-| `notebooks/` | Exploration and the notebook that goes into the submission |
+| `src/` | Python modules: data preparation, feature extraction, stress-test variants (`variants.py`); detector and evaluation still to come |
+| `notebooks/` | Exploration and the notebook that goes into the submission. Figures from notebook 03 are in `notebooks/figures/` |
 | `slides/` | Presentation (20 min plus 5 min questions) |
 | `docs/` | Working notes: case and technique choice, task division, investigation log, the newest `handoff-*.md` |
 

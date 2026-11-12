@@ -1,6 +1,17 @@
 # Handoff: data pipeline for modelling
 
-**Date:** 2026-11-11. Short overview for whoever builds the detectors. It explains how the data is set up, why, and how to get going. Definitions of every column are in `docs/data_dictionary.md`; background and numbers are in `docs/Baseline findings.md`.
+**Date:** 2026-11-12 (first version 2026-11-11). Short overview for whoever builds the detectors. It explains how the data is set up, why, and how to get going. Definitions of every column are in `docs/data_dictionary.md`; background and numbers are in `docs/Baseline findings.md`.
+
+## 0. Start here
+
+1. Read this file, then `docs/data_dictionary.md` (every column, the feature sets, the limits).
+2. Run `python main.py --all --tests`. **`data/processed/` is git-ignored, so `features.csv` does not exist until you run this.** It needs `data/raw/dns.log` (Canvas download); `data/labels.csv` is in the repo.
+3. Open `notebooks/03_features.ipynb` (run it, about 3 minutes; figures are saved in `notebooks/figures/`). Its Observations and Decisions section records why each feature is in or out.
+
+**What is done:** data preparation, the default feature set, the strict variant, stress-test variants (`src/variants.py`), 30 acceptance tests.
+**What is yours:** the detector (`src/detector.py`), the evaluation (`src/evaluation.py`), thresholds, false-positive and false-negative analysis, and the comparison with a baseline and one alternative model.
+
+**The feature set is a starting point, not frozen.** Notebook 03 compares feature sets with Isolation Forest, but only to choose a sensible default (threshold-free ROC and PR AUC on one tunnel event). If the modelling shows a feature should change, change it in `src/features.py`, keep the old column as an ablation, update `tests/test_features.py`, `docs/data_dictionary.md` and this file, rerun `python main.py --all --tests`, and tell the group. Do not change `src/prepare.py`, the split or the labels without agreeing: they define what every result means.
 
 ## 1. The data in one minute
 
@@ -22,19 +33,25 @@
 
 The strict variant (`first`) keeps the first copy instead and cuts at 18:04:36. Training is then only 244 quiet rows, so it mostly shows what happens when the load changes between training and test.
 
-## 3. The eight features
+## 3. The features (updated 2026-11-12)
 
 Each one follows from how any DNS tunnel has to behave, not from this particular tool or lab.
 
 | Features | What they capture |
 |---|---|
-| `name_bytes`, `longest_label`, `entropy` | Data travels in the name, so names are long and random-looking. Catches the 37 data and probe queries, not the pings. |
-| `uniq_names_60s`, `uniq_ratio_60s` | Caching forces a new name for every query, so one domain gets many unique names in the last 60 s. Catches the whole session. |
-| `norepeat_evidence` | Grows while a domain has never asked the same name twice. A long memory that also works for slow tunnels. |
-| `log_cum_uniq` | Total distinct names so far. Optional: it drifts with time, so check it. |
+| `name_bytes` | Data travels in the name, so names are long. Catches the 37 data and probe queries, not the pings. `longest_label` and `entropy` say almost the same (correlation about 0.8) and are kept as ablation columns only. |
+| `uniq_names_60s`, `uniq_ratio_60s` | Caching forces a new name for every query, so one machine gets many unique names from one domain in the last 60 s. Catches the whole session. Counted per (client, parent domain). |
+| `norepeat_tol` | `log(distinct names so far)` scaled by the share of queries that were new names. A long memory that also works for slow tunnels, and one repeated name barely changes it. |
+| `norepeat_evidence`, `log_cum_uniq` (ablation only, set `extra`) | `norepeat_evidence` is the same idea as `norepeat_tol` but one repeated name sets it to 0 for good (best score on clean data, brittle). `log_cum_uniq` drifts with time since the start of the capture. Run both as ablations. |
 | `data_qtype` | 1 if the record type is NULL or TXT. An on/off switch for an ablation, because NULL is iodine's choice. |
 
-Feature sets (`feature_sets(60)`): `shape`, `context`, `qtype`, `forced` (shape + context), `full` (forced + qtype).
+Feature sets (`feature_sets(60)`): `shape`, `context`, `qtype`, `forced` (shape + context, **the default**: `name_bytes`, `uniq_names_60s`, `uniq_ratio_60s`, `norepeat_tol`), `full` (forced + qtype), `extra` (`longest_label`, `entropy`, `norepeat_evidence`, `log_cum_uniq`), `all` (everything).
+
+**Why this default (2026-11-12):** it should hold for any DNS tunnel and not depend on how this iodine run behaves.
+- **One shape feature:** `name_bytes`, `longest_label` and `entropy` correlate about 0.8, and Isolation Forest picks features at random, so three shape features crowd out the context features (strict PR AUC 0.974 with one, 0.658 with three; with 20 simulated hosts 0.987 against 0.70). The choice of `name_bytes` rests on redundancy; the numbers are mixed (see notebook 03).
+- **`norepeat_tol` as default:** when a single tunnel name is repeated once, `norepeat_evidence` falls from PR AUC 0.997 to 0.956; `norepeat_tol` stays at 0.993. On clean data `norepeat_evidence` is slightly better, so report both.
+- **`log_cum_uniq` out:** it drifts with time since the start of the capture.
+- **Per (client, parent) counting:** changes no value in this capture (one benign client, one tunnel client) and the noisy-host simulation did not show a benefit; it is a design choice for networks with many hosts.
 
 **Deliberately left out:** IPs, ports, AA/RA flags, TTL, EDNS0, `rtt`, NXDOMAIN, raw query volume and domain names. They separate the classes here only because of the lab set-up.
 
@@ -73,7 +90,7 @@ Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` o
 ## 5. Suggested approach for the modelling
 
 1. **Isolation Forest** on `forced`, fitted on the training rows only. No scaling needed.
-2. **Threshold from the training scores** (Tukey: Q3 + 1.5 times the IQR), so no labels are used. Note that `contamination` isn't used; say why in the report.
+2. **Choose the threshold without the test rows.** Options: a percentile of the scores on a benign validation slice (for example the last part of the training period), or Tukey (Q3 + 1.5 times the IQR) on the training scores as one baseline. Tukey on the training scores is poorly calibrated here (section 7), so compare. Do not tune on the test rows. Note that `contamination` isn't used; say why in the report.
 3. **Evaluate on the test rows:** precision, recall, F1, FPR, ROC and PR AUC, recall per `phase`, and look at the top false positives (CDN and cloud names are likely).
 4. **Compare with simple baselines**, as the lecture suggests: a length + entropy rule, and Tukey or MAD on `uniq_names_60s` alone. The simple one may do as well. If so, say so.
 5. **Stress tests:** `forced` against `full` (does the record type matter?), window sizes, the strict variant, and a slow-tunnel simulation.
@@ -85,6 +102,23 @@ Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` o
 - The start of a session looks benign until evidence builds up (about 12% of the tunnel).
 - 6.5% of rows are tunnel, far more than in a real network, so precision is optimistic.
 
-## 7. Not built yet
+## 7. Check these early (stress tests for the modelling)
 
-`variants.py` (the slow-tunnel simulation) and `evaluate.py` (metrics helpers). Agree who writes them.
+- **Threshold risk:** a Tukey threshold from the training scores flags about 170 benign rows in the primary run (precision about 0.56), mostly `yahoo.com` and `yahoodns.net` in the 18:50 busy period, and about 1,170 in the strict run (precision about 0.16). The default ranks the tunnel better than before (see notebook 03) but the threshold from training scores is poorly calibrated, so this is the first thing to fix. Training is calm (at most 16 unique names in 60 s, against 28 in the benign test traffic). Choose thresholds on a benign validation slice at the end of the training period, never on the test rows.
+- **A simple rule is a strong baseline:** `uniq_names_60s > 28` gives precision 1.0 and recall 0.87 on the test rows (the 28 was read off the test data, so this is optimistic).
+- **Ablations:** `forced` against `forced` + `norepeat_evidence`, `log_cum_uniq`, `data_qtype`; windows 60, 300, 900.
+- **Repeat injection (`inject_repeats`):** repeat one tunnel name once and compare `norepeat_evidence` with `norepeat_tol`.
+- **Event-level metrics:** the 222 test positives are one correlated session. Report time to first alert next to row-level precision and recall.
+- **Other cuts:** try `--cut` values besides 18:30.
+
+## 8. Stress-test variants (built: `src/variants.py`)
+
+`add_benign_clients(prep, n_extra)` (more benign hosts that share domains and partly ask host-specific names), `collapse_clients(prep)` (count per parent only, the behaviour before the per-client grouping), `slow_tunnel(prep, k)` (tunnel k times slower) and `inject_repeats(prep, n)`. Each returns a table in the `prepare()` format, with training still benign only; pass it to `build_features()`. Tested in `tests/test_variants.py`.
+
+First results (primary run, ROC / PR AUC, Isolation Forest, simulated data): with 1 to 20 benign hosts, `name_bytes` + context stays at PR 0.986 to 0.993, while the three shape features + context fall from PR 0.980 to 0.699. Per-parent counting did not do worse than per-client counting here, because the tunnel domain is only asked by the tunnel host and `uniq_ratio` and `norepeat_tol` still separate it; the per-client grouping is a design choice that this simulation does not confirm. Slow tunnels up to 60 times slower (about 25 minutes) stay at ROC 0.99 or higher.
+
+Simulations built from one capture: they test robustness, they do not prove generalisation. Still to build: short-name and long-name low-rate tunnels, other record types, a tunnel domain that other hosts also ask.
+
+## 9. Not built yet
+
+`src/detector.py` (train, score every row, write `scores.csv` for the evaluation) and `src/evaluation.py` (metrics, event-level metrics, false-positive and false-negative case studies). See `docs/Task division.md` for who owns what.
