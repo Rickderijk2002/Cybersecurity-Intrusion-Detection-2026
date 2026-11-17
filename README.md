@@ -14,8 +14,8 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 |---|---|
 | `assignment/` | The Canvas brief and rubric, copied verbatim |
 | `data/raw/` | PCAP and `dns.log`. **Git-ignored**, download from Canvas |
-| `src/` | Python modules: data preparation (`prepare.py`), features (`features.py`), stress-test variants (`variants.py`), the Isolation Forest detector (`detector.py`), evaluation helpers (`evaluation.py`) and explanatory figures (`plots.py`). Baselines, an alternative model and incident-level metrics still to come |
-| `notebooks/` | Exploration and the notebook that goes into the submission. Figures (notebook 03 and `python -m src.plots`) are in `notebooks/figures/` |
+| `src/` | Python modules: data preparation (`prepare.py`), features (`features.py`), stress-test variants (`variants.py`), the Isolation Forest detector (`detector.py`), evaluation helpers (`evaluation.py`), rule baselines (`baselines.py`), incident grouping (`incidents.py`) and explanatory figures (`plots.py`) |
+| `notebooks/` | Exploration (01 to 03) and the results notebook (`04_results.ipynb`: main result, rule baselines, incidents, alert line and window, stress tests, errors). Figures are in `notebooks/figures/` |
 | `slides/` | Presentation (20 min plus 5 min questions) |
 | `docs/` | Working notes: case and technique choice, task division, investigation log, the modelling handoff and data dictionary, and the newest handoffs in `docs/tmp/` |
 
@@ -26,6 +26,8 @@ python main.py --all --tests     # features (default + strict variant) and the f
 python -m src.detector           # Isolation Forest, writes data/processed/scores.csv; add --checks for the model checks
 python tests/test_detector.py    # detector and evaluation tests
 python tests/test_plots.py       # figure tests
+python tests/test_incidents.py   # incident grouping tests
+python tests/test_baselines.py   # rule baseline tests
 python -m src.plots              # writes notebooks/figures/isolation_forest_view.png
 ```
 

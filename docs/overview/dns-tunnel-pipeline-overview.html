@@ -113,17 +113,17 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 </section>
 <section>
 <h3>Why this feature set</h3>
-<p>Isolation Forest fitted on benign training rows, PR AUC on the test rows (mean of 10 seeds, threshold-free). Primary = tunnel copy 2; strict = copy 1 with only 244 training rows. One tunnel event, so read the direction, not the decimals.</p>
+<p>The detector's Isolation Forest (fitted on the first 80% of the benign training rows), PR AUC on the test rows (mean of 10 seeds, threshold-free). Primary = tunnel copy 2; strict = copy 1 with only 244 training rows. One tunnel event, so read the direction, not the decimals.</p>
 <table class="tbl">
 <tr><th>Feature set</th><th class="n">Primary</th><th class="n">Strict</th></tr>
-<tr><td>Context only</td><td class="n">0.993</td><td class="n">0.985</td></tr>
-<tr class="hl"><td>Default: <code>name_bytes</code> + context</td><td class="n">0.993</td><td class="n">0.974</td></tr>
-<tr><td>Default + <code>entropy</code></td><td class="n">0.993</td><td class="n">0.870</td></tr>
-<tr><td>Default + <code>longest_label</code></td><td class="n">0.993</td><td class="n">0.809</td></tr>
-<tr><td>All three shape features + context</td><td class="n">0.975</td><td class="n">0.658</td></tr>
-<tr><td>Default without <code>norepeat_tol</code></td><td class="n">0.969</td><td class="n">0.533</td></tr>
-<tr><td>Default + <code>norepeat_evidence</code></td><td class="n">0.997</td><td class="n">0.991</td></tr>
-<tr><td>Default + <code>log_cum_uniq</code></td><td class="n">0.991</td><td class="n">0.887</td></tr>
+<tr><td>Context only</td><td class="n">0.993</td><td class="n">0.988</td></tr>
+<tr class="hl"><td>Default: <code>name_bytes</code> + context</td><td class="n">0.993</td><td class="n">0.985</td></tr>
+<tr><td>Default + <code>entropy</code></td><td class="n">0.993</td><td class="n">0.757</td></tr>
+<tr><td>Default + <code>longest_label</code></td><td class="n">0.992</td><td class="n">0.803</td></tr>
+<tr><td>All three shape features + context</td><td class="n">0.959</td><td class="n">0.573</td></tr>
+<tr><td>Default without <code>norepeat_tol</code></td><td class="n">0.977</td><td class="n">0.678</td></tr>
+<tr><td>Default + <code>norepeat_evidence</code></td><td class="n">0.996</td><td class="n">0.992</td></tr>
+<tr><td>Default + <code>log_cum_uniq</code></td><td class="n">0.990</td><td class="n">0.968</td></tr>
 </table>
 <p style="margin-top:.5rem">More shape features rank worse because they are redundant and take splits from the context features. <code>norepeat_tol</code> carries the ranking. <code>norepeat_evidence</code> scores a little higher on clean data but one repeated name switches it off (see below), so it is an ablation. Details and figures: <code>notebooks/03_features.ipynb</code>.</p>
 
@@ -132,8 +132,8 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 <h3>Stress tests (simulated, built from this one capture)</h3>
 <div class="grid">
 <div class="card"><b>Slower tunnel</b><span>Up to 60 times slower (about 25 minutes). ROC AUC stays at 0.99 or higher; the default holds up better than context only at the slowest setting.</span></div>
-<div class="card"><b>More benign hosts</b><span>1 to 20 hosts. Default PR AUC 0.986 to 0.993; three shape features fall from 0.98 to 0.70. Per-client counting showed no benefit here: a design choice, not a result.</span></div>
-<div class="card"><b>One repeated name</b><span><code>norepeat_evidence</code> PR AUC 0.997 to 0.956. <code>norepeat_tol</code> stays at 0.993.</span></div>
+<div class="card"><b>More benign hosts</b><span>1 to 20 hosts. Default PR AUC 0.986 to 0.993; three shape features fall from 0.96 to 0.70. Per-client counting showed no benefit here: a design choice, not a result.</span></div>
+<div class="card"><b>One repeated name</b><span><code>norepeat_evidence</code> PR AUC 0.996 to 0.968. <code>norepeat_tol</code> stays at 0.993.</span></div>
 </div>
 
 </section>
@@ -168,7 +168,8 @@ python -m src.detector              Isolation Forest, writes scores.csv</pre>
 <li>Grouped into incidents, about 75 false alert queries are about 3 false incidents, and the tunnel is one incident flagged within the first second.</li>
 <li>One window per model: 60 + 300 + 900 s together gives more false positives (136 against 72) for the same ranking.</li>
 </ul>
-<p style="margin-top:.5rem"><b>Next:</b> a simple rule baseline and one alternative model (LOF or one-class SVM) on the same features; incident-level metrics; a threshold by window grid with spread; stress tests; false-positive and false-negative case studies; the report text.</p>
+<p style="margin-top:.5rem">All of this, the rule baselines, the incident view, the stress tests and the error analysis are in <code>notebooks/04_results.ipynb</code>. A rule on unique names alone gets F1 0.86 against 0.85 for the forest, but on a tunnel 60 times slower it drops to recall 0.79 while the forest keeps PR AUC 0.989.</p>
+<p style="margin-top:.5rem"><b>Next:</b> an alternative model (LOF or one-class SVM), further variants (domain rotation, long-name low-rate tunnels), and the report text.</p>
 </section>
 <section>
 <h3>Limits to state</h3>
@@ -176,10 +177,10 @@ python -m src.detector              Isolation Forest, writes scores.csv</pre>
 <li>One tunnel session, one tool, one benign client. The simulations are built from this one capture and show robustness, not generalisation.</li>
 <li>The tunnel is loud, so results will look strong. Slow and noisy variants are the real test.</li>
 <li>The first 28 tunnel queries (12%) stay within the benign range of <code>uniq_names_60s</code>. 6.5% of rows are tunnel, so precision is optimistic.</li>
-<li>The feature set is a starting point: <code>name_bytes</code> as the only shape feature rests on redundancy, and the numbers are mixed.</li>
+<li>The feature set is a starting point: <code>name_bytes</code> as the only shape feature rests on redundancy, and the evidence is modest.</li>
 </ul>
 </section>
-<div class="foot">Updated 2026-11-17 from data/processed, the notebooks and the detector. See docs/phase2 - feature engineering overview.md (handoff and first detector findings), docs/data_dictionary.md and docs/tmp/handoff-2026-11-15-1945.md for details.</div>
+<div class="foot">Updated 2026-11-17 from data/processed, the notebooks (03 features, 04 results) and the detector. See docs/phase2 - feature engineering overview.md (handoff and first detector findings), docs/data_dictionary.md and docs/tmp/handoff-2026-11-15-1945.md for details.</div>
 
 <script>
 const BEN=[3,5,10,6,5,9,23,10,10,10,2,9,7,2,3,11,6,22,5,4,6,9,8,4,1,3,8,13,5,26,8,41,11,19,76,50,452,551,6,12,2,5,14,8,13,5,5,8,9,12,5,12,10,10,3,2,7,13,1,5,4,0,5,4,2,0,16,12,20,0,4,10,9,2,19,598,337,415,18,11,0,9,16,6,23,2,3,4,3,10,0,4,8,2,3,2];

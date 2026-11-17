@@ -8,8 +8,8 @@
 2. Run `python main.py --all --tests`. **`data/processed/` is git-ignored, so `features.csv` does not exist until you run this.** It needs `data/raw/dns.log` (Canvas download); `data/labels.csv` is in the repo.
 3. Open `notebooks/03_features.ipynb` (run it, about 3 minutes; figures are saved in `notebooks/figures/`). Its Observations and Decisions section records why each feature is in or out.
 
-**What is done:** data preparation, the default feature set, the strict variant, stress-test variants (`src/variants.py`), the Isolation Forest detector with threshold options and basic evaluation (`src/detector.py`, `src/evaluation.py`, Tycho; see `docs/tmp/handoff-2026-11-15-1945.md`), an explanatory figure (`src/plots.py`), and 45 acceptance tests.
-**What is open:** the simple rule baseline and one alternative model (LOF or one-class SVM) on the same matrix, incident-level metrics and time to first alert, mean and spread over seeds, a threshold by window grid, the stress tests, false-positive and false-negative case studies as figures, and the report text. See sections 5, 9 and 10.
+**What is done:** data preparation, the default feature set, the strict variant, stress-test variants (`src/variants.py`), the Isolation Forest detector with threshold options and basic evaluation (`src/detector.py`, `src/evaluation.py`, Tycho; see `docs/tmp/handoff-2026-11-15-1945.md`), an explanatory figure (`src/plots.py`), the rule baselines (`src/baselines.py`), incident grouping (`src/incidents.py`), the results notebook `notebooks/04_results.ipynb` (main result over 10 seeds, comparison with the rules, incidents, alert line by window, stress tests, errors, takeaways), and 57 acceptance tests.
+**What is open:** an alternative model (LOF or one-class SVM; postponed), a final run with more seeds if wanted, and the report text. See sections 5, 9 and 10.
 
 **The feature set is a starting point, not frozen.** Notebook 03 compares feature sets with Isolation Forest, but only to choose a sensible default (threshold-free ROC and PR AUC on one tunnel event). If the modelling shows a feature should change, change it in `src/features.py`, keep the old column as an ablation, update `tests/test_features.py`, `docs/data_dictionary.md` and this file, rerun `python main.py --all --tests`, and tell the group. Do not change `src/prepare.py`, the split or the labels without agreeing: they define what every result means.
 
@@ -48,8 +48,8 @@ Each one follows from how any DNS tunnel has to behave, not from this particular
 Feature sets (`feature_sets(60)`): `shape`, `context`, `qtype`, `forced` (shape + context, **the default**: `name_bytes`, `uniq_names_60s`, `uniq_ratio_60s`, `norepeat_tol`), `full` (forced + qtype), `extra` (`longest_label`, `entropy`, `norepeat_evidence`, `log_cum_uniq`), `all` (everything).
 
 **Why this default (2026-11-12):** it should hold for any DNS tunnel and not depend on how this iodine run behaves.
-- **One shape feature:** `name_bytes`, `longest_label` and `entropy` correlate about 0.8, and Isolation Forest picks features at random, so three shape features crowd out the context features (strict PR AUC 0.974 with one, 0.658 with three; with 20 simulated hosts 0.987 against 0.70). The choice of `name_bytes` rests on redundancy; the numbers are mixed (see notebook 03).
-- **`norepeat_tol` as default:** when a single tunnel name is repeated once, `norepeat_evidence` falls from PR AUC 0.997 to 0.956; `norepeat_tol` stays at 0.993. On clean data `norepeat_evidence` is slightly better, so report both.
+- **One shape feature:** `name_bytes`, `longest_label` and `entropy` correlate about 0.8, and Isolation Forest picks features at random, so three shape features crowd out the context features (strict PR AUC 0.985 with one, 0.573 with three; with 20 simulated hosts 0.987 against 0.70). The choice of `name_bytes` rests on redundancy; the numbers are mixed (see notebook 03).
+- **`norepeat_tol` as default:** when a single tunnel name is repeated once, `norepeat_evidence` falls from PR AUC 0.996 to 0.968; `norepeat_tol` stays at 0.993. On clean data `norepeat_evidence` is slightly better, so report both.
 - **`log_cum_uniq` out:** it drifts with time since the start of the capture.
 - **Per (client, parent) counting:** changes no value in this capture (one benign client, one tunnel client) and the noisy-host simulation did not show a benefit; it is a design choice for networks with many hosts.
 
@@ -95,12 +95,9 @@ Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` o
 2. The threshold is chosen without the test rows: the highest score on a time-ordered validation slice (the last 20% of the training period), plus other methods (percentiles, Tukey, time-ordered folds) to compare. `contamination` is not used; say why in the report.
 3. Evaluation on the test rows: precision, recall, F1, FPR, ROC and PR AUC, recall per `phase`, the top false positives, the missed queries, plus a feature-importance check, a trees and sample-size check and a score plot.
 
-**Open (see section 10 for what the first checks showed):**
-4. **Simple baselines**, as the lecture suggests: a length + entropy rule, and a threshold on `uniq_names_60s` alone. The simple one may do as well. If so, say so.
-5. **One alternative model** (LOF or one-class SVM; scale the features, fit the scaler on training rows only), scored with the same `evaluation.py` helpers.
-6. **Incident-level metrics** (alerts grouped per client and domain) and time to first alert.
-7. **Mean and spread over seeds**, and a threshold by window grid. Never pick the best seed.
-8. **Stress tests:** `forced` against `full`, window sizes, other cuts, the strict variant and the simulations in `src/variants.py`.
+**Built in `notebooks/04_results.ipynb`:** the main result as mean and spread over 10 seeds; the comparison with two rule baselines (unique names; name length or randomness); incidents and time to first alert; the alert line by window (7 methods, 3 windows); the strict variant and the stress tests (slow tunnel, 10 benign hosts, a repeated name); the false-positive and false-negative case studies; ROC and PR curves, confusion matrix, feature importance and the other figures in `notebooks/figures/`.
+
+**Still open:** one alternative model (LOF or one-class SVM; scale the features, fit the scaler on training rows only; postponed, discuss it in 3.4), further variants (domain rotation, long-name low-rate tunnels, other record types), and the report text. Section 10 has the first findings.
 
 ## 6. Things to be honest about in the report
 
@@ -122,13 +119,13 @@ Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` o
 
 `add_benign_clients(prep, n_extra)` (more benign hosts that share domains and partly ask host-specific names), `collapse_clients(prep)` (count per parent only, the behaviour before the per-client grouping), `slow_tunnel(prep, k)` (tunnel k times slower) and `inject_repeats(prep, n)`. Each returns a table in the `prepare()` format, with training still benign only; pass it to `build_features()`. Tested in `tests/test_variants.py`.
 
-First results (primary run, ROC / PR AUC, Isolation Forest, simulated data): with 1 to 20 benign hosts, `name_bytes` + context stays at PR 0.986 to 0.993, while the three shape features + context fall from PR 0.980 to 0.699. Per-parent counting did not do worse than per-client counting here, because the tunnel domain is only asked by the tunnel host and `uniq_ratio` and `norepeat_tol` still separate it; the per-client grouping is a design choice that this simulation does not confirm. Slow tunnels up to 60 times slower (about 25 minutes) stay at ROC 0.99 or higher.
+First results (primary run, ROC / PR AUC, Isolation Forest, simulated data): with 1 to 20 benign hosts, `name_bytes` + context stays at PR 0.986 to 0.993, while the three shape features + context fall from PR 0.958 to 0.704. Per-parent counting did not do worse than per-client counting here, because the tunnel domain is only asked by the tunnel host and `uniq_ratio` and `norepeat_tol` still separate it; the per-client grouping is a design choice that this simulation does not confirm. Slow tunnels up to 60 times slower (about 25 minutes) stay at ROC 0.99 or higher.
 
 Simulations built from one capture: they test robustness, they do not prove generalisation. Still to build: short-name and long-name low-rate tunnels, other record types, a tunnel domain that other hosts also ask.
 
 ## 9. Not built yet
 
-The simple baselines and the alternative model (4 and 5 in section 5), incident-level metrics (`group_alerts`, time to first alert), a seed and window sweep with mean and spread, and the evaluation figures for the report (PR curve, confusion matrices, false-positive and false-negative case studies). Report sections 3.2 to 3.4. See `docs/Task division.md` for who owns what.
+An alternative model (LOF or one-class SVM), the variants listed in section 8 under "still to build", and report sections 3.2 to 3.4. See `docs/Task division.md` for who owns what.
 
 ## 10. First findings from the detector (checked 2026-11-17)
 

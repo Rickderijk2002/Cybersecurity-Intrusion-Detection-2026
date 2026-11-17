@@ -65,9 +65,9 @@ The test for every feature: does it follow from how any DNS tunnel has to behave
 | `extra` | `longest_label`, `entropy`, `norepeat_evidence`, `log_cum_uniq`: kept for ablations, not in the default |
 | `all` | every feature column (`full` + `extra`) |
 
-Why `longest_label` and `entropy` are not in the default: they correlate about 0.8 with `name_bytes` on benign training rows, so they add little information, and with three shape features Isolation Forest puts about half of its splits on the block that carries the least signal here. One shape feature plus the context features ranked clearly better (primary PR AUC 0.993 against 0.975; strict 0.974 against 0.658) and stayed stable when the simulated network grew to 20 benign hosts (PR 0.987), where three shape features fell to 0.70. Note that this is about ranking; at a Tukey threshold taken from the training scores the trimmed set raises more alerts in the strict run (about 1,170 false positives against about 530), so choose thresholds on a validation slice. The choice of `name_bytes` rests on redundancy, not on the test numbers; recheck it in the slow-tunnel and long-name variants.
+Why `longest_label` and `entropy` are not in the default: they correlate about 0.8 with `name_bytes` on benign training rows, so they add little information, and with three shape features Isolation Forest puts about half of its splits on the block that carries the least signal here. One shape feature plus the context features ranked clearly better (primary PR AUC 0.993 against 0.959; strict 0.985 against 0.573) and stayed stable when the simulated network grew to 20 benign hosts (PR 0.987), where three shape features fell to 0.70. Note that this is about ranking; at a Tukey threshold taken from the training scores the trimmed set raises more alerts in the strict run (about 1,170 false positives against about 530), so choose thresholds on a validation slice. The choice of `name_bytes` rests on redundancy, not on the test numbers; recheck it in the slow-tunnel and long-name variants.
 
-Why `norepeat_evidence` and `log_cum_uniq` are not in the default: the first breaks on a single repeated name (with one injected repeat in the tunnel, PR AUC fell from 0.997 to 0.956 and ROC AUC from 0.998 to 0.994; `norepeat_tol` stayed at 0.993 and 0.996), the second drifts with time. On clean data `norepeat_evidence` is slightly better (primary run, 10 seeds: ROC AUC 0.998 against 0.996, PR AUC 0.997 against 0.993; strict 0.991 against 0.974), so report both.
+Why `norepeat_evidence` and `log_cum_uniq` are not in the default: the first breaks on a single repeated name (with one injected repeat in the tunnel, PR AUC fell from 0.996 to 0.968 and ROC AUC from 0.998 to 0.995; `norepeat_tol` stayed at 0.993 and 0.996), the second drifts with time. On clean data `norepeat_evidence` is slightly better (primary run, 10 seeds: ROC AUC 0.998 against 0.996, PR AUC 0.996 against 0.993; strict 0.992 against 0.985), so report both.
 
 ### Drift between training and test (default run)
 
@@ -111,9 +111,12 @@ Share of test benign rows above the training maximum: `uniq_names_60s` 3.2%, `lo
 | `src/detector.py` | Isolation Forest: time-ordered validation slice, threshold methods, time-ordered folds, `run_detector()`, `write_scores()`. Never reads the labels. Run with `python -m src.detector` |
 | `src/evaluation.py` | Checks alerts against the labels: `confusion()`, `recall_per_phase()`, `threshold_table()`, `summarize()`, feature importance, parameter check, score plot |
 | `src/plots.py` | `plot_isolation_view()`: how Isolation Forest sees the data (feature space and the number of random cuts per query). `python -m src.plots` writes `notebooks/figures/isolation_forest_view.png` |
+| `src/baselines.py` | `run_rule(m, kind)`: rule baselines (`unique_names`, `shape`) that alert above the highest training value; same `scored` format as the detector |
+| `src/incidents.py` | `group_alerts()`, `incident_metrics()`: alerts of one client and domain less than 60 s apart form one incident; false incidents, per hour, time to first alert |
+| `notebooks/04_results.ipynb` | The results notebook: calls the modules above, saves its figures in `notebooks/figures/` |
 | `data/processed/scores.csv` | One row per query with `role` (fit / val / test), `score` (higher = more anomalous) and `alert`; written by `python -m src.detector` |
 | `tests/test_prepare.py`, `tests/test_features.py`, `tests/test_variants.py` | Acceptance checks for the data, run with `python tests/test_features.py`. `main.py --tests` runs these three |
-| `tests/test_detector.py`, `tests/test_plots.py` | Checks for the detector, evaluation and figures. Not run by `main.py --tests`; run them separately |
+| `tests/test_detector.py`, `tests/test_plots.py`, `tests/test_incidents.py`, `tests/test_baselines.py` | Checks for the detector, evaluation, figures, incidents and baselines. Not run by `main.py --tests`; run them separately |
 
 ```python
 from src.features import load_matrix, feature_sets
