@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DNS tunnel detection: model and evaluation</title>
+<style>
+:root{--text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;--surface-1:#f3f2ee;--surface-2:#ffffff;--border:#e1e0d9;--radius:8px;
+--font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@page{size:A4;margin:12mm 12mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{zoom:.86;margin:0 auto;max-width:720px;padding:18px;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--text-primary);background:#fff;font-size:14px;line-height:1.6}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+h3{font-size:16px;font-weight:500;margin:1.6rem 0 .5rem;break-after:avoid}
+p{margin:0 0 .5rem;font-size:14px;line-height:1.6;color:var(--text-secondary)}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.card{background:var(--surface-2);border:.5px solid #cfcdc4;border-radius:12px;padding:12px 14px;break-inside:avoid}
+.card b{display:block;font-weight:500;font-size:14px;color:var(--text-primary);margin-bottom:4px}
+.card span{font-size:13px;line-height:1.5;color:var(--text-secondary)}
+.stats{grid-template-columns:repeat(4,1fr)}
+.stat{background:var(--surface-1);border-radius:var(--radius);padding:12px 14px;break-inside:avoid}
+.stat i{display:block;font-style:normal;font-size:12px;color:var(--text-secondary)}
+.stat b{font-size:22px;font-weight:500;color:var(--text-primary)}
+code{font-family:var(--font-mono);font-size:12px;background:var(--surface-1);padding:1px 5px;border-radius:4px;color:var(--text-primary)}
+.flow{display:flex;align-items:stretch;gap:6px;break-inside:avoid}.flow .card{flex:1;padding:10px 12px}.flow .ar{align-self:center;color:var(--text-muted);font-size:18px;font-style:normal}
+.lg{display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin:0 0 4px;break-after:avoid}.lg s{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;text-decoration:none}
+pre{margin:0;background:var(--surface-1);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-mono);font-size:12px;line-height:1.7;color:var(--text-primary);overflow-x:auto;break-inside:avoid}
+ol,ul{margin:0;padding-left:1.2rem;font-size:14px;line-height:1.7;color:var(--text-secondary)}
+section{break-inside:avoid}
+svg{display:block;break-inside:avoid;font-family:inherit}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;break-inside:avoid}.tbl th{font-weight:500;text-align:left;color:var(--text-secondary);border-bottom:.5px solid #cfcdc4;padding:4px 8px 4px 0}.tbl td{padding:4px 8px 4px 0;border-bottom:.5px solid var(--border);color:var(--text-secondary)}.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.ref td,.ref th{font-size:12px;vertical-align:top;padding:5px 8px 5px 0}.ref td:first-child{white-space:nowrap}.ref tr{break-inside:avoid}.ref tr.grp code{text-transform:none;letter-spacing:0}section.ref-sec{break-inside:auto}.tbl.ref{break-inside:auto}.ref tr.grp{break-after:avoid}.ref-sec>p{break-after:avoid}.ref tr.grp td{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding-top:10px;border-bottom:.5px solid #cfcdc4}
+.tbl tr.hl td{color:var(--text-primary);font-weight:500}
+.foot{margin-top:2rem;font-size:11px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Overview of the DNS tunnel model and its evaluation.</h2>
+<h1>DNS tunnel detection: model and evaluation</h1>
+<p>The short version for the report and the presentation: the idea, the model, the main result, how it compares with a simple rule, how robust it is, and what limits it. Every number comes from <code>notebooks/04_results.ipynb</code>. JM2030 Cybersecurity, Group 3, case 1.</p>
+<div class="grid stats" style="margin:.75rem 0 0">
+<div class="stat"><i>ROC AUC</i><b>0.996</b></div>
+<div class="stat"><i>PR AUC</i><b>0.993</b></div>
+<div class="stat"><i>Tunnel queries caught</i><b>98.7%</b></div>
+<div class="stat"><i>False incidents (real: 1)</i><b>about 3</b></div>
+</div>
+
+<section>
+<h3>The idea</h3>
+<p>A DNS tunnel hides data in query names. Resolvers cache repeated names, so a tunnel has to keep asking one domain for many <b>new</b> names. That is hard to avoid, and it is what we measure.</p>
+<div class="flow">
+<div class="card"><b>Features</b><span>4 numbers per query: how many new names, how many repeats, long-memory score, name length</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>Model</b><span>Isolation Forest learns what normal DNS looks like</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>Alert line</b><span>A score above the strangest normal queries raises an alert</span></div><i class="ar">&rarr;</i>
+<div class="card"><b>Incidents</b><span>Alerts of one machine and domain are grouped</span></div>
+</div>
+</section>
+
+<section>
+<h3>The setup</h3>
+<div class="grid">
+<div class="card"><b>Train on normal only</b><span>All normal traffic before 18:30 (1,592 queries). The model never sees the tunnel.</span></div>
+<div class="card"><b>Test after 18:30</b><span>1,609 normal queries and the 222-query tunnel session, during a busy normal period.</span></div>
+<div class="card"><b>The alert line</b><span>The highest score on a held-back slice of normal training traffic. No test rows are used to choose anything.</span></div>
+</div>
+<p style="margin-top:.5rem">Features: <code>uniq_names_60s</code> <code>uniq_ratio_60s</code> <code>norepeat_tol</code> <code>name_bytes</code>. 300 trees, 10 random seeds (mean and spread reported).</p>
+</section>
+
+
+<section>
+<h3>The main result</h3>
+<table class="tbl">
+<tr><th>Measure</th><th class="n">Mean over 10 seeds</th><th>What it says</th></tr>
+<tr class="hl"><td>ROC AUC / PR AUC</td><td class="n">0.996 / 0.993</td><td>The tunnel is ranked almost perfectly</td></tr>
+<tr><td>Recall</td><td class="n">0.987</td><td>Only the first 2 to 3 queries of the session are missed</td></tr>
+<tr><td>Precision</td><td class="n">0.746 (0.69 to 0.79)</td><td>Most alerts are real, but not all</td></tr>
+<tr><td>False alert queries</td><td class="n">75 (58 to 97)</td><td>Mostly the busy Yahoo burst at 18:50</td></tr>
+<tr class="hl"><td>Incidents</td><td class="n">1 real, about 3 false</td><td>The tunnel is one incident of 219 alerts</td></tr>
+</table>
+<p style="margin-top:.5rem">The model leans on two features: unique names per domain and the long-memory score. Name length and the repeat ratio hardly matter here.</p>
+</section>
+
+<section>
+<h3>How Isolation Forest sees the data</h3>
+<p>It finds no groups. It asks how many random cuts it takes to separate one query from all the others: normal queries sit in a dense cloud and need many, a tunnel query is alone and needs few.</p>
+<img src="../../notebooks/figures/isolation_forest_view.png" alt="Isolation Forest: feature space and number of random cuts" style="width:100%;border:.5px solid #cfcdc4;border-radius:8px">
+<p style="margin-top:.5rem">Left: the normal queries form a dense cloud, the tunnel runs far away from it. Right: a normal query needs about 11 cuts to isolate, a tunnel query about 4.</p>
+</section>
+
+<section>
+<h3>Against a simple rule</h3>
+<p>A rule alerts when the number of unique names exceeds anything seen in normal training traffic. It has nothing to learn.</p>
+<table class="tbl">
+<tr><th></th><th class="n">PR AUC</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">F1</th><th class="n">False incidents</th></tr>
+<tr class="hl"><td>Isolation Forest</td><td class="n">0.993</td><td class="n">0.746</td><td class="n">0.987</td><td class="n">0.850</td><td class="n">3.1</td></tr>
+<tr><td>Rule: unique names</td><td class="n">0.958</td><td class="n">0.798</td><td class="n">0.928</td><td class="n">0.858</td><td class="n">1</td></tr>
+<tr><td>Rule: name length or randomness</td><td class="n">0.324</td><td class="n">0.909</td><td class="n">0.180</td><td class="n">0.301</td><td class="n">2</td></tr>
+</table>
+<p style="margin-top:.5rem">On this loud tunnel the simple unique-names rule is about as good. The forest ranks better and misses less, and it wins clearly on slow tunnels (next section). Single-query checks on name shape miss most of the tunnel, because most tunnel queries are short polls.</p>
+</section>
+
+<section>
+<h3>How robust is it?</h3>
+<p>The same model on other versions of the data. These are simulations built from this one capture: they test robustness, they do not prove generalisation.</p>
+<table class="tbl">
+<tr><th>Case</th><th>Isolation Forest</th><th>Unique-names rule</th></tr>
+<tr class="hl"><td>Tunnel 60 times slower (about 25 minutes)</td><td>PR AUC 0.989, recall 0.98, alert within 1 s</td><td>PR AUC 0.861, recall 0.79, alert after 786 s</td></tr>
+<tr><td>Normal traffic on 10 hosts</td><td>PR AUC 0.988, 19 false incidents</td><td>PR AUC 0.906, 10 false incidents</td></tr>
+<tr><td>Only 244 quiet training queries</td><td>PR AUC 0.983, precision 0.18</td><td>PR AUC 0.954, precision 0.30</td></tr>
+<tr><td>One tunnel name repeated</td><td>no change</td><td>no change</td></tr>
+</table>
+<p style="margin-top:.5rem">The forest keeps catching a slow tunnel because the long-memory feature has no time window. With little or very calm training data the alert line is too low and the false alerts explode, while the ranking holds.</p>
+</section>
+
+<section>
+<h3>What limits it: the alert line</h3>
+<ul>
+<li>The <b>ranking</b> barely changes with the window or the way the line is set (PR AUC 0.993 to 0.995). The number of <b>false alerts</b> does: from about 75 at a 60 s window to about 3 or 4 at 300 or 900 s.</li>
+<li>The false alerts come from one busy normal period. Training never saw more than 16 unique names in 60 s, and the Yahoo burst reached 28. The model cannot know that burst is normal.</li>
+<li>So a model trained on a short, calm period of normal traffic needs a line that is recalibrated as normal traffic changes.</li>
+</ul>
+</section>
+
+<section>
+<h3>The main insight</h3>
+<div class="card" style="border-color:#2a78d6"><span style="font-size:14px;color:var(--text-primary)">DNS tunnelling is found because it cannot avoid creating many new names under one domain. The Isolation Forest ranks it almost perfectly from a few such features. How many false alerts result depends on the alert line, and on how representative the normal training traffic is.</span></div>
+</section>
+
+<section>
+<h3>Limits to state</h3>
+<ul>
+<li>One tunnel session, one tool, one benign client, 95 minutes. The numbers are optimistic and say nothing about other tunnels or networks.</li>
+<li>6.5% of the rows are tunnel, far more than in a real network, so precision is optimistic.</li>
+<li>Not covered: tunnels that rotate over many domains, other record types, a second dataset, and live monitoring where normal traffic changes over time.</li>
+</ul>
+</section>
+<div class="foot">Generated 2026-11-17 from notebooks/04_results.ipynb. Details: docs/phase2 - feature engineering overview.md and docs/data_dictionary.md.</div>
+</body>
+</html>
