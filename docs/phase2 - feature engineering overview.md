@@ -1,6 +1,6 @@
 # Handoff: data pipeline for modelling
 
-**Date:** 2026-11-12 (first version 2026-11-11). Short overview for whoever builds the detectors. It explains how the data is set up, why, and how to get going. Definitions of every column are in `docs/data_dictionary.md`; background and numbers are in `docs/Baseline findings.md`.
+**Date:** 2026-11-17 (first version 2026-11-11). Short overview of the data, the features and where the modelling stands. It explains how the data is set up, why, and how to get going. Definitions of every column are in `docs/data_dictionary.md`; background and numbers are in `docs/Baseline findings.md`.
 
 ## 0. Start here
 
@@ -8,8 +8,8 @@
 2. Run `python main.py --all --tests`. **`data/processed/` is git-ignored, so `features.csv` does not exist until you run this.** It needs `data/raw/dns.log` (Canvas download); `data/labels.csv` is in the repo.
 3. Open `notebooks/03_features.ipynb` (run it, about 3 minutes; figures are saved in `notebooks/figures/`). Its Observations and Decisions section records why each feature is in or out.
 
-**What is done:** data preparation, the default feature set, the strict variant, stress-test variants (`src/variants.py`), 30 acceptance tests.
-**What is yours:** the detector (`src/detector.py`), the evaluation (`src/evaluation.py`), thresholds, false-positive and false-negative analysis, and the comparison with a baseline and one alternative model.
+**What is done:** data preparation, the default feature set, the strict variant, stress-test variants (`src/variants.py`), the Isolation Forest detector with threshold options and basic evaluation (`src/detector.py`, `src/evaluation.py`, Tycho; see `docs/tmp/handoff-2026-11-15-1945.md`), an explanatory figure (`src/plots.py`), and 45 acceptance tests.
+**What is open:** the simple rule baseline and one alternative model (LOF or one-class SVM) on the same matrix, incident-level metrics and time to first alert, mean and spread over seeds, a threshold by window grid, the stress tests, false-positive and false-negative case studies as figures, and the report text. See sections 5, 9 and 10.
 
 **The feature set is a starting point, not frozen.** Notebook 03 compares feature sets with Isolation Forest, but only to choose a sensible default (threshold-free ROC and PR AUC on one tunnel event). If the modelling shows a feature should change, change it in `src/features.py`, keep the old column as an ablation, update `tests/test_features.py`, `docs/data_dictionary.md` and this file, rerun `python main.py --all --tests`, and tell the group. Do not change `src/prepare.py`, the split or the labels without agreeing: they define what every result means.
 
@@ -62,6 +62,7 @@ uv pip install -r requirements.txt      # once
 python main.py                          # default run: tunnel = 18:50, cut 18:30, window 60 s
 python main.py --all --tests            # default + strict variant, and run the checks
 python main.py --window 60 300 900      # several window sizes (for slow tunnels)
+python -m src.detector                  # Isolation Forest on features.csv, writes scores.csv (add --checks for model checks)
 python main.py --session first          # only the first tunnel copy
 python main.py --cut "2023-01-07 18:20:00"   # another train/test cut
 ```
@@ -87,13 +88,19 @@ The features are raw (not scaled) and all numeric. Isolation Forest does not nee
 
 Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` or `client` as features. They are metadata, kept for evaluation and error analysis.
 
-## 5. Suggested approach for the modelling
+## 5. Modelling: what exists and what is open
 
-1. **Isolation Forest** on `forced`, fitted on the training rows only. No scaling needed.
-2. **Choose the threshold without the test rows.** Options: a percentile of the scores on a benign validation slice (for example the last part of the training period), or Tukey (Q3 + 1.5 times the IQR) on the training scores as one baseline. Tukey on the training scores is poorly calibrated here (section 7), so compare. Do not tune on the test rows. Note that `contamination` isn't used; say why in the report.
-3. **Evaluate on the test rows:** precision, recall, F1, FPR, ROC and PR AUC, recall per `phase`, and look at the top false positives (CDN and cloud names are likely).
-4. **Compare with simple baselines**, as the lecture suggests: a length + entropy rule, and Tukey or MAD on `uniq_names_60s` alone. The simple one may do as well. If so, say so.
-5. **Stress tests:** `forced` against `full` (does the record type matter?), window sizes, the strict variant, and a slow-tunnel simulation.
+**Built (slice 4, `src/detector.py` and `src/evaluation.py`):**
+1. Isolation Forest on `forced`, fitted on the training rows only (the first 80% of the training period). No scaling needed.
+2. The threshold is chosen without the test rows: the highest score on a time-ordered validation slice (the last 20% of the training period), plus other methods (percentiles, Tukey, time-ordered folds) to compare. `contamination` is not used; say why in the report.
+3. Evaluation on the test rows: precision, recall, F1, FPR, ROC and PR AUC, recall per `phase`, the top false positives, the missed queries, plus a feature-importance check, a trees and sample-size check and a score plot.
+
+**Open (see section 10 for what the first checks showed):**
+4. **Simple baselines**, as the lecture suggests: a length + entropy rule, and a threshold on `uniq_names_60s` alone. The simple one may do as well. If so, say so.
+5. **One alternative model** (LOF or one-class SVM; scale the features, fit the scaler on training rows only), scored with the same `evaluation.py` helpers.
+6. **Incident-level metrics** (alerts grouped per client and domain) and time to first alert.
+7. **Mean and spread over seeds**, and a threshold by window grid. Never pick the best seed.
+8. **Stress tests:** `forced` against `full`, window sizes, other cuts, the strict variant and the simulations in `src/variants.py`.
 
 ## 6. Things to be honest about in the report
 
@@ -104,7 +111,7 @@ Never use `ts`, `label`, `y`, `split`, `burst`, `is_replay`, `phase`, `parent` o
 
 ## 7. Check these early (stress tests for the modelling)
 
-- **Threshold risk:** a Tukey threshold from the training scores flags about 170 benign rows in the primary run (precision about 0.56), mostly `yahoo.com` and `yahoodns.net` in the 18:50 busy period, and about 1,170 in the strict run (precision about 0.16). The default ranks the tunnel better than before (see notebook 03) but the threshold from training scores is poorly calibrated, so this is the first thing to fix. Training is calm (at most 16 unique names in 60 s, against 28 in the benign test traffic). Choose thresholds on a benign validation slice at the end of the training period, never on the test rows.
+- **Threshold risk:** the alert line, not the ranking, is the weak point (section 10): the same model gives anywhere from 0 to about 1,000 false positives depending on the threshold method, the window and the training slice. Training is calm (at most 16 unique names in 60 s, against 28 in the benign test traffic). Choose thresholds on a benign validation slice at the end of the training period, report mean and spread over seeds, and never tune on the test rows.
 - **A simple rule is a strong baseline:** `uniq_names_60s > 28` gives precision 1.0 and recall 0.87 on the test rows (the 28 was read off the test data, so this is optimistic).
 - **Ablations:** `forced` against `forced` + `norepeat_evidence`, `log_cum_uniq`, `data_qtype`; windows 60, 300, 900.
 - **Repeat injection (`inject_repeats`):** repeat one tunnel name once and compare `norepeat_evidence` with `norepeat_tol`.
@@ -121,4 +128,24 @@ Simulations built from one capture: they test robustness, they do not prove gene
 
 ## 9. Not built yet
 
-`src/detector.py` (train, score every row, write `scores.csv` for the evaluation) and `src/evaluation.py` (metrics, event-level metrics, false-positive and false-negative case studies). See `docs/Task division.md` for who owns what.
+The simple baselines and the alternative model (4 and 5 in section 5), incident-level metrics (`group_alerts`, time to first alert), a seed and window sweep with mean and spread, and the evaluation figures for the report (PR curve, confusion matrices, false-positive and false-negative case studies). Report sections 3.2 to 3.4. See `docs/Task division.md` for who owns what.
+
+## 10. First findings from the detector (checked 2026-11-17)
+
+`python -m src.detector` reproduces the numbers in Tycho's handoff exactly (default run, seed 0: ROC AUC 0.996, PR AUC 0.993, precision 0.791, recall 0.986, 58 false positives, 3 missed queries). Checks with 10 seeds:
+
+| Alert line (mean false positives / recall) | Window 60 s | Window 300 s | Window 900 s | Strict variant (60 s) |
+|---|---|---|---|---|
+| `val_max` (default) | 75 / 0.987 | 3 / 0.986 | 4 / 0.986 | 957 / 0.990 |
+| `folds_max` | 4 / 0.983 | 0 / 0.889 | 0 / 0.571 | 19 / 0.986 |
+| `folds_median` | 76 / 0.987 | 9 / 0.986 | 8 / 0.986 | 651 / 0.986 |
+
+- **The ranking is stable; the alert line is not.** ROC and PR AUC barely move with seed, window or tree count. The number of alerts swings from 0 to about 1,000 false positives. The 58 false positives of seed 0 is the best of 10 seeds (mean 75, range 58 to 97): report mean and spread.
+- **Why:** the validation slice (18:12 to 18:29) is calm (at most 12 unique names in 60 s, training went up to 16), so the busy Yahoo burst at 18:50 (24 to 28) scores above the line.
+- **`folds_max` looks best at 60 s but collapses at longer windows** (recall 0.89 at 300 s, 0.57 at 900 s). Do not pick it only because it gives 4 false positives.
+- **A longer window gives the same ranking and far fewer false positives with `val_max`.** Choosing the window because of the false-positive count is choosing on the test rows. If the default changes, justify it with the slow-tunnel simulation and say that the counts were seen.
+- **Do not put several windows in one model.** 60 + 300 s together gives 119 false positives and 60 + 300 + 900 s together 136, against 72 for 60 s alone, with the same ranking. The windows correlate 0.74 to 0.90 and redundant features crowd out the others.
+- **A combined feature does not help.** Unique names times ratio, and a count of first-seen names in the window, did not improve the ranking and did not reduce the false positives reliably (primary and strict run).
+- **Incidents tell the story better than queries.** Grouping alerts per client and domain (gap under 60 s), the 75 false alert queries become about 3 false incidents (up to 76 alerts each), and the tunnel is one incident of about 219 alerts, flagged within the first second.
+- **Which features the model uses:** `uniq_names_60s` (PR AUC drop 0.34 when shuffled) and `norepeat_tol` (0.20) drive it; `name_bytes` (0.007) and `uniq_ratio_60s` (0.004) hardly matter here. This explains why a rule on `uniq_names_60s` alone gets close.
+- **How Isolation Forest sees the data:** `notebooks/figures/isolation_forest_view.png` (made by `python -m src.plots`). A normal query needs about 11 random cuts to isolate, a tunnel query about 4.

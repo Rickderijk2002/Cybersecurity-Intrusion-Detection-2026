@@ -57,9 +57,9 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 <div class="card"><b>dns.log + labels</b><span>3,645 rows, joined by row_id</span></div><i class="ar">&rarr;</i>
 <div class="card"><b>prepare.py</b><span>Wire-byte names, parent domain, one tunnel copy, split</span></div><i class="ar">&rarr;</i>
 <div class="card"><b>features.py</b><span>4 default features per query, per client and domain, causal</span></div><i class="ar">&rarr;</i>
-<div class="card"><b>models</b><span>Isolation Forest and baselines (next step)</span></div>
+<div class="card"><b>detector.py</b><span>Isolation Forest, alert line from a validation slice, evaluation helpers</span></div>
 </div>
-<p style="margin-top:.5rem"><code>src/variants.py</code> builds stress-test versions of the data (slower tunnel, more benign hosts, a repeated name) that go through the same feature code. 30 acceptance tests cover all three modules.</p>
+<p style="margin-top:.5rem"><code>src/variants.py</code> builds stress-test versions of the data (slower tunnel, more benign hosts, a repeated name) that go through the same feature code. 45 acceptance tests cover the data, the detector and the figures.</p>
 
 </section>
 <section>
@@ -138,23 +138,37 @@ svg{display:block;break-inside:avoid;font-family:inherit}
 
 </section>
 <section>
+<h3>How Isolation Forest sees the data</h3>
+<p>It finds no groups, unlike k-means. It asks how many random cuts it takes to separate one query from all the others: normal queries sit in a dense cloud and need many cuts, a strange query is alone and needs few.</p>
+<img src="../../notebooks/figures/isolation_forest_view.png" alt="Isolation Forest: feature space and number of random cuts" style="width:100%;border:.5px solid #cfcdc4;border-radius:8px">
+<p style="margin-top:.5rem">Left: the normal queries form a dense cloud, the tunnel runs far away from it. Right: a normal query needs about 11 cuts to isolate, a tunnel query about 4. The dashed line is the alert line.</p>
+
+</section>
+<section>
 <h3>Running it</h3>
 <pre>python main.py                      default: copy 2, cut 18:30, 60 s window
 python main.py --all --tests        default + strict variant, then the checks
 python main.py --window 60 300 900  several window sizes (slow tunnels)
-python main.py --session first      only copy 1</pre>
+python main.py --session first      only copy 1
+python -m src.detector              Isolation Forest, writes scores.csv</pre>
 <p style="margin-top:.5rem"><code>data/processed/</code> is not in git: run <code>python main.py</code> first (needs <code>data/raw/dns.log</code> from Canvas). Then start with <code>features.csv</code>. Columns: <code>split</code> (train/test), <code>y</code> (label), 4 default features plus 5 ablation columns. Features are raw, not scaled. Default set: <code>feature_sets(60)["forced"]</code>.</p>
 
 </section>
 <section>
-<h3>Suggested modelling</h3>
-<ol>
-<li>Fit Isolation Forest on the default features, training rows only.</li>
-<li>Choose the threshold without the test rows: a percentile on a benign validation slice. Tukey on the training scores is poorly calibrated here (about 170 benign rows flagged in the primary run), so treat it as a baseline.</li>
-<li>Evaluate on test: precision, recall, F1, recall per phase, event-level metrics (time to first alert), and look at the false positives.</li>
-<li>Compare with simple baselines (a rule on <code>uniq_names_60s</code> is strong) and one alternative model. Then the ablations, window sizes, other cuts and the variants.</li>
-</ol>
-
+<h3>The detector: what we found, and what is next</h3>
+<p>The detector is built (<code>src/detector.py</code>, <code>src/evaluation.py</code>). It ranks the tunnel almost perfectly (ROC 0.996, PR 0.993), and that barely changes with seed, window or tree count. The <b>alert line</b>, the score above which a query raises an alert, is the weak point. Mean false positives and recall over 10 seeds:</p>
+<table class="tbl">
+<tr><th>Alert line</th><th class="n">60 s</th><th class="n">300 s</th><th class="n">900 s</th><th class="n">Strict (60 s)</th></tr>
+<tr class="hl"><td><code>val_max</code> (default)</td><td class="n">75 / 0.987</td><td class="n">3 / 0.986</td><td class="n">4 / 0.986</td><td class="n">957 / 0.990</td></tr>
+<tr><td><code>folds_max</code></td><td class="n">4 / 0.983</td><td class="n">0 / 0.889</td><td class="n">0 / 0.571</td><td class="n">19 / 0.986</td></tr>
+<tr><td><code>folds_median</code></td><td class="n">76 / 0.987</td><td class="n">9 / 0.986</td><td class="n">8 / 0.986</td><td class="n">651 / 0.986</td></tr>
+</table>
+<ul style="margin-top:.5rem">
+<li>The false alerts are the busy Yahoo burst at 18:50. The validation slice was calm, so the line sits below it. Report mean and spread: the 58 false positives of seed 0 is the best of 10 seeds.</li>
+<li>Grouped into incidents, about 75 false alert queries are about 3 false incidents, and the tunnel is one incident flagged within the first second.</li>
+<li>One window per model: 60 + 300 + 900 s together gives more false positives (136 against 72) for the same ranking.</li>
+</ul>
+<p style="margin-top:.5rem"><b>Next:</b> a simple rule baseline and one alternative model (LOF or one-class SVM) on the same features; incident-level metrics; a threshold by window grid with spread; stress tests; false-positive and false-negative case studies; the report text.</p>
 </section>
 <section>
 <h3>Limits to state</h3>
@@ -165,7 +179,7 @@ python main.py --session first      only copy 1</pre>
 <li>The feature set is a starting point: <code>name_bytes</code> as the only shape feature rests on redundancy, and the numbers are mixed.</li>
 </ul>
 </section>
-<div class="foot">Updated 2026-11-12 from data/processed and notebooks 02 and 03. See docs/phase2 - feature engineering overview.md (handoff) and docs/data_dictionary.md for details.</div>
+<div class="foot">Updated 2026-11-17 from data/processed, the notebooks and the detector. See docs/phase2 - feature engineering overview.md (handoff and first detector findings), docs/data_dictionary.md and docs/tmp/handoff-2026-11-15-1945.md for details.</div>
 
 <script>
 const BEN=[3,5,10,6,5,9,23,10,10,10,2,9,7,2,3,11,6,22,5,4,6,9,8,4,1,3,8,13,5,26,8,41,11,19,76,50,452,551,6,12,2,5,14,8,13,5,5,8,9,12,5,12,10,10,3,2,7,13,1,5,4,0,5,4,2,0,16,12,20,0,4,10,9,2,19,598,337,415,18,11,0,9,16,6,23,2,3,4,3,10,0,4,8,2,3,2];

@@ -1,6 +1,6 @@
 # Data dictionary: feature matrix
 
-**Date:** 2026-11-12 (updated: client grouping, `norepeat_tol`, new default sets, shape block trimmed to `name_bytes`). Describes `data/processed/features.csv` (and the variants) produced by `src/prepare.py` and `src/features.py`. Seeds report section 3.1 (features). Numbers come from the default run and were checked by `tests/test_prepare.py` and `tests/test_features.py`.
+**Date:** 2026-11-17 (updated: client grouping, `norepeat_tol`, new default sets, shape block trimmed to `name_bytes`; file table now lists the detector). Describes `data/processed/features.csv` (and the variants) produced by `src/prepare.py` and `src/features.py`. Seeds report section 3.1 (features). Numbers come from the default run and were checked by `tests/test_prepare.py` and `tests/test_features.py`.
 
 ## How the matrix is made
 
@@ -108,7 +108,12 @@ Share of test benign rows above the training maximum: `uniq_names_60s` 3.2%, `lo
 | `src/prepare.py` | `load_raw()`, `prepare(df, session, cut)`, `write_prepared()` |
 | `src/features.py` | `build_features()`, `make_matrix()`, `load_matrix()`, `write_matrix()`, `feature_sets()`, `drift_table()` |
 | `src/variants.py` | Stress-test tables: `add_benign_clients()`, `collapse_clients()`, `slow_tunnel()`, `inject_repeats()` |
-| `tests/test_prepare.py`, `tests/test_features.py`, `tests/test_variants.py` | Acceptance checks, run with `python tests/test_features.py` |
+| `src/detector.py` | Isolation Forest: time-ordered validation slice, threshold methods, time-ordered folds, `run_detector()`, `write_scores()`. Never reads the labels. Run with `python -m src.detector` |
+| `src/evaluation.py` | Checks alerts against the labels: `confusion()`, `recall_per_phase()`, `threshold_table()`, `summarize()`, feature importance, parameter check, score plot |
+| `src/plots.py` | `plot_isolation_view()`: how Isolation Forest sees the data (feature space and the number of random cuts per query). `python -m src.plots` writes `notebooks/figures/isolation_forest_view.png` |
+| `data/processed/scores.csv` | One row per query with `role` (fit / val / test), `score` (higher = more anomalous) and `alert`; written by `python -m src.detector` |
+| `tests/test_prepare.py`, `tests/test_features.py`, `tests/test_variants.py` | Acceptance checks for the data, run with `python tests/test_features.py`. `main.py --tests` runs these three |
+| `tests/test_detector.py`, `tests/test_plots.py` | Checks for the detector, evaluation and figures. Not run by `main.py --tests`; run them separately |
 
 ```python
 from src.features import load_matrix, feature_sets

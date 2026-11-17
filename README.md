@@ -5,7 +5,7 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 - **Due:** 5 Dec 2026, 23:59 (upload as one zip). **Presentation:** 30 Nov or 1 Dec
 - **Case:** Case 1, DNS tunnelling (see `docs/Case and technique.md`)
 - **Technique:** Isolation Forest
-- **Start here (modelling):** `docs/phase2 - feature engineering overview.md`, then `docs/data_dictionary.md` and `notebooks/03_features.ipynb`
+- **Start here (modelling):** `docs/phase2 - feature engineering overview.md`, then `docs/data_dictionary.md`, `notebooks/03_features.ipynb` and the detector handoff `docs/tmp/handoff-2026-11-15-1945.md`
 - **Brief and grading criteria:** `assignment/Assignment brief.md`
 
 ## Layout
@@ -14,10 +14,22 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 |---|---|
 | `assignment/` | The Canvas brief and rubric, copied verbatim |
 | `data/raw/` | PCAP and `dns.log`. **Git-ignored**, download from Canvas |
-| `src/` | Python modules: data preparation, feature extraction, stress-test variants (`variants.py`); detector and evaluation still to come |
-| `notebooks/` | Exploration and the notebook that goes into the submission. Figures from notebook 03 are in `notebooks/figures/` |
+| `src/` | Python modules: data preparation (`prepare.py`), features (`features.py`), stress-test variants (`variants.py`), the Isolation Forest detector (`detector.py`), evaluation helpers (`evaluation.py`) and explanatory figures (`plots.py`). Baselines, an alternative model and incident-level metrics still to come |
+| `notebooks/` | Exploration and the notebook that goes into the submission. Figures (notebook 03 and `python -m src.plots`) are in `notebooks/figures/` |
 | `slides/` | Presentation (20 min plus 5 min questions) |
-| `docs/` | Working notes: case and technique choice, task division, investigation log, the newest `handoff-*.md` |
+| `docs/` | Working notes: case and technique choice, task division, investigation log, the modelling handoff and data dictionary, and the newest handoffs in `docs/tmp/` |
+
+## Run the pipeline
+
+```bash
+python main.py --all --tests     # features (default + strict variant) and the feature tests
+python -m src.detector           # Isolation Forest, writes data/processed/scores.csv; add --checks for the model checks
+python tests/test_detector.py    # detector and evaluation tests
+python tests/test_plots.py       # figure tests
+python -m src.plots              # writes notebooks/figures/isolation_forest_view.png
+```
+
+`data/processed/` is git-ignored, so run `python main.py` first. It needs `data/raw/dns.log` from Canvas.
 
 ## The report
 
