@@ -8,7 +8,7 @@ import numpy as np
 
 from src.detector import run_detector
 from src.features import build_features, feature_sets
-from src.plots import average_cuts, plot_isolation_view
+from src.plots import average_cuts, plot_capture_timeline, plot_isolation_view
 from src.prepare import load_raw, prepare
 
 M = build_features(prepare(load_raw(), session="second"), window_s=60)
@@ -36,6 +36,12 @@ def test_figure_is_saved(tmp=Path(__file__).resolve().parents[1] / "data" / "pro
     path = plot_isolation_view(SCORED, INFO, tmp)
     assert path.exists() and path.stat().st_size > 0
     path.unlink()
+
+
+def test_capture_timeline_writes_a_figure(tmp_path=None):
+    import tempfile
+    out = plot_capture_timeline(M, Path(tempfile.mkdtemp()) / "t.png")
+    assert out.exists() and out.stat().st_size > 5000
 
 
 if __name__ == "__main__":

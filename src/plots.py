@@ -79,12 +79,48 @@ def plot_isolation_view(scored, info, path, x="uniq_names_60s", y="norepeat_tol"
     return path
 
 
+def plot_capture_timeline(m, path):
+    """Queries per minute, normal against tunnel, with the train/test cut: what we investigate and how we split it."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    t = pd.to_datetime(m["ts"], unit="s").dt.floor("min")
+    counts = m.assign(minute=t).groupby(["minute", "y"]).size().unstack(fill_value=0)
+    counts = counts.reindex(columns=[0, 1], fill_value=0)
+    cut = pd.to_datetime(m.loc[m["split"] == "test", "ts"].min(), unit="s").floor("min")
+
+    fig, ax = plt.subplots(figsize=(9, 3.3))
+    w = pd.Timedelta(seconds=50)
+    ax.bar(counts.index, counts[0], width=w, color="#2a78d6", label="normal queries")
+    ax.bar(counts.index, counts[1], width=w, bottom=counts[0], color="#d6402a", label="tunnel queries")
+    ax.axvline(cut, color="k", ls="--", lw=1.2)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.18)
+    top = ax.get_ylim()[1]
+    ax.axvspan(counts.index.min() - w, cut, color="#2a78d6", alpha=.07)
+    ax.text(counts.index.min(), top * .93, "TRAIN: normal only", fontsize=9, va="top")
+    ax.text(cut + pd.Timedelta(minutes=1), top * .93, "TEST: normal + tunnel", fontsize=9, va="top")
+    ax.set_ylabel("queries per minute"); ax.set_xlabel("time (UTC)")
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%H:%M"))
+    ax.legend(fontsize=8, loc="center left", bbox_to_anchor=(0.0, 0.62))
+    ax.set_title("The capture: normal DNS and one tunnel session, split at the dashed line", fontsize=11)
+    fig.tight_layout()
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+    return path
+
+
 def main() -> None:
     from src.detector import run_detector
     from src.features import feature_sets, load_matrix
 
     scored, info = run_detector(load_matrix(), feature_sets(60)["forced"])
     out = plot_isolation_view(scored, info, FIGURES / "isolation_forest_view.png")
+    print(f"wrote {out.relative_to(ROOT)}")
+    out = plot_capture_timeline(load_matrix(), FIGURES / "capture_timeline.png")
     print(f"wrote {out.relative_to(ROOT)}")
 
 

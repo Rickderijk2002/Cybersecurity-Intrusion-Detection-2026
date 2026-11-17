@@ -5,8 +5,24 @@ Group final project: find the malicious traffic in a PCAP with a data science te
 - **Due:** 5 Dec 2026, 23:59 (upload as one zip). **Presentation:** 30 Nov or 1 Dec
 - **Case:** Case 1, DNS tunnelling (see `docs/Case and technique.md`)
 - **Technique:** Isolation Forest
-- **Start here (modelling):** `docs/phase2 - feature engineering overview.md`, then `docs/data_dictionary.md`, `notebooks/03_features.ipynb` and the detector handoff `docs/tmp/handoff-2026-11-15-1945.md`
+- **Start here (everyone):** read `docs/overview/dns-tunnel-detection-overview.pdf` (3 pages: data, features, model, results, limits). The numbers come from `notebooks/04_results.ipynb`.
+- **Detail, only if you need it:** `docs/data_dictionary.md` (every feature), `docs/phase2 - feature engineering overview.md` (why the feature set looks like this).
 - **Brief and grading criteria:** `assignment/Assignment brief.md`
+
+## Status of the report
+
+| Section | Status | Owner |
+|---|---|---|
+| 1 Introduction | open | open |
+| 2 Attack investigation | written | done |
+| 3.1 Features | in progress | Thom |
+| 3.2 Detection method (Isolation Forest) and 3.3 Evaluation | in progress | Tycho |
+| 4 Mitigation and protection | open | open |
+| 5 Discussion and future opportunities | open | open |
+| 6 Conclusion | open | open |
+| Slides | open | open |
+
+Writing about the model? Use the figures in `notebooks/figures/` and the numbers in the overview. `docs/Task division.md` is the original plan, not the current status.
 
 ## Layout
 
@@ -28,7 +44,7 @@ python tests/test_detector.py    # detector and evaluation tests
 python tests/test_plots.py       # figure tests
 python tests/test_incidents.py   # incident grouping tests
 python tests/test_baselines.py   # rule baseline tests
-python -m src.plots              # writes notebooks/figures/isolation_forest_view.png
+python -m src.plots              # writes the Isolation Forest and capture timeline figures
 ```
 
 `data/processed/` is git-ignored, so run `python main.py` first. It needs `data/raw/dns.log` from Canvas.
