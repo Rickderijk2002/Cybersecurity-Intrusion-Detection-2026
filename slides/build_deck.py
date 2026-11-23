@@ -1,14 +1,18 @@
-"""Build the presentation deck, part 1 (attack investigation), as one self-contained HTML file.
+"""Build the presentation deck (attack investigation, detection, evaluation, mitigation) as one self-contained HTML file.
 
 Run from the repository root:  python slides/build_deck.py
-Needs data/raw/dns.log (Canvas download) and data/labels.csv. Every number and every chart on the
-slides is computed here from those two files, so the deck cannot drift from the data.
-Output: slides/Group 3 Part 1 Attack investigation.html (open in a browser, print to PDF to hand in).
+Slides 2 to 9 (attack investigation) are computed here from data/raw/dns.log (Canvas download) and
+data/labels.csv. Slides 10 to 19 (detector) read slides/results.json, which `python slides/compute_results.py`
+writes from src/ and checks against the report's tables. Both parts assert the numbers they quote, so the
+deck fails loudly instead of drifting from the data.
+Output: slides/Group 3 Presentation.html (open in a browser, print to PDF to hand in).
+The earlier part 1 only deck was removed on 2026-11-23; it is in git history (commit 321e26c).
 """
 from __future__ import annotations
 
 import base64
 import html
+import json
 import math
 import re
 from pathlib import Path
@@ -17,7 +21,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = Path(__file__).resolve().parent / "assets"
-OUT = Path(__file__).resolve().parent / "Group 3 Part 1 Attack investigation.html"
+OUT = Path(__file__).resolve().parent / "Group 3 Presentation.html"
+RESULTS = Path(__file__).resolve().parent / "results.json"
 
 BURST_SPLIT = pd.Timestamp("2023-01-07 18:30:00")
 _ESCAPE = re.compile(r"\\x([0-9A-Fa-f]{2})")
@@ -235,6 +240,232 @@ def fig_shells() -> str:
     return "".join(out)
 
 
+# ---------------------------------------------------------------- detector figures (slides 10 to 19)
+# Numbers taken from the report and not recomputed here: the tuned comparison runs live in notebook 05.
+# Report Table 2 (300 s window, val_max). Local Outlier Factor and One-Class SVM: one configuration each.
+ALT = [("Isolation Forest", 0.9865, 0.0021, 1.9), ("Local Outlier Factor", 0.9279, 0.0068, 10.0),
+       ("One-Class SVM", 0.9820, 0.0746, 9.0)]
+SLOW_TUNNEL_RECALL = 98.3      # report 3.4: tunnel 60 times slower, chosen configuration
+QUIET_TRAINING_FPR = (4.79, 25.90)   # report 3.3: 60 s window, all training rows against 244 quiet ones
+
+
+def load_results() -> dict:
+    r = json.loads(RESULTS.read_text(encoding="utf-8"))
+    rows = r["test_rows"]
+    assert r["split"] == {"fit": 1274, "val": 318, "test": 1831, "test_tunnel": 222}
+    assert len(rows) == 1831 and sum(x[2] for x in rows) == 222
+    assert r["missed_same_every_seed"] and r["missed_by_seed"] == [3] * 10
+    tun = [x for x in rows if x[2] == 1]
+    assert [x[3] for x in tun[:4]] == [0, 0, 0, 1], "the first alert is no longer the fourth tunnel query"
+    return r
+
+
+def fig_split(r: dict) -> str:
+    """Slide 11: the time split. Segment widths are proportional to the number of queries."""
+    s = r["split"]
+    total = s["fit"] + s["val"] + s["test"]
+    w, h, base_y, bh = 1144, 196, 74, 64
+    sc = w / total
+    xs = [0, s["fit"] * sc, (s["fit"] + s["val"]) * sc]
+    ws = [s["fit"] * sc, s["val"] * sc, s["test"] * sc]
+    names = [("Fit the forest", "start"), ("Threshold", "middle"), ("Evaluate", "start")]
+    inner = [f'{s["fit"]:,} normal queries', f'{s["val"]}', f'{s["test"]:,} queries']
+    inner_x = [xs[0] + ws[0] / 2, xs[1] + ws[1] / 2, xs[2] + 24]
+    inner_a = ["middle", "middle", "start"]
+    cls = ["seg-fit", "seg-val", "seg-test"]
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="Chronological split: {s["fit"]} to fit, {s["val"]} for the threshold, {s["test"]} to test">']
+    for i in range(3):
+        d = i * 140
+        lab_x = xs[i] + {0: 0, 1: ws[i] / 2, 2: 14}[i]
+        out.append(f'<g class="grow-x" style="animation-delay:{d}ms"><rect class="{cls[i]}" x="{xs[i]:.1f}" '
+                   f'y="{base_y}" width="{ws[i]:.1f}" height="{bh}" rx="6"/></g>'
+                   f'<text class="sp-t rv" style="--i:{i + 2}" x="{lab_x:.1f}" y="{base_y - 34}" '
+                   f'text-anchor="{names[i][1]}">{names[i][0]}</text>'
+                   f'<line class="sp-br" x1="{xs[i] + 2:.1f}" x2="{xs[i] + ws[i] - 2:.1f}" y1="{base_y - 18}" '
+                   f'y2="{base_y - 18}"/>'
+                   f'<text class="sp-n rv" style="--i:{i + 2}" x="{inner_x[i]:.1f}" y="{base_y + 41}" '
+                   f'text-anchor="{inner_a[i]}">{inner[i]}</text>')
+    # the tunnel session inside the test period (seed 0 clock, seconds from the first test query)
+    rows = r["test_rows"]
+    span = max(x[0] for x in rows)
+    tun = [x for x in rows if x[2] == 1]
+    a, b = tun[0][0], tun[-1][0]
+    ta, tb = xs[2] + a / span * ws[2], xs[2] + b / span * ws[2]
+    out.append(f'<rect class="seg-tun" x="{ta - 3:.1f}" y="{base_y}" width="{max(tb - ta, 0) + 6:.1f}" '
+               f'height="{bh}" rx="3"/>')
+    out.append(f'<line class="sp-lead" x1="{(ta + tb) / 2:.1f}" x2="{(ta + tb) / 2:.1f}" y1="{base_y + bh}" '
+               f'y2="{base_y + bh + 24}"/>')
+    out.append(f'<text class="an-t sp-lead-t" x="{(ta + tb) / 2 - 12:.1f}" y="{base_y + bh + 32}" text-anchor="end">'
+               f'222 tunnel queries in {b - a:.0f} seconds</text>')
+    out.append(f'<text class="ax" x="0" y="{h - 4}">time, oldest first</text>'
+               f'<text class="ax" x="{w}" y="{h - 4}" text-anchor="end">newest</text></svg>')
+    return "".join(out)
+
+
+def fig_scores(r: dict) -> str:
+    """Slide 12: anomaly scores of the test queries, stacked histogram, tunnel red after the reveal."""
+    rows, thr = r["test_rows"], r["threshold"]
+    lo, hi, step = 0.38, 0.80, 0.02
+    nb = round((hi - lo) / step)
+    ben, tun = [0] * nb, [0] * nb
+    for _, sc, y, _, _ in rows:
+        i = min(int((sc - lo) / step), nb - 1)
+        (tun if y else ben)[i] += 1
+    assert sum(ben) == 1609 and sum(tun) == 222, "scores fall outside the histogram range"
+    w, h, x0, x1, base, top, ymax = 1144, 336, 64, 1136, 262, 24, 220
+    sy = (base - top) / ymax
+
+    def xx(v):
+        return x0 + (v - lo) / (hi - lo) * (x1 - x0)
+
+    bw = (x1 - x0) / nb
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="Anomaly scores of normal and tunnel queries in the test period">']
+    for v in (0, 50, 100, 150, 200):
+        y = base - v * sy
+        out.append(f'<line class="grid" x1="{x0}" x2="{x1}" y1="{y:.1f}" y2="{y:.1f}"/>'
+                   f'<text class="ax" x="{x0 - 12}" y="{y + 6:.1f}" text-anchor="end">{v}</text>')
+    for i in range(nb):
+        if ben[i] + tun[i] == 0:
+            continue
+        x = x0 + i * bw + 3
+        seg = ""
+        if ben[i]:
+            seg += f'<rect class="bn" x="{x:.1f}" y="{base - ben[i] * sy:.1f}" width="{bw - 6:.1f}" height="{ben[i] * sy:.1f}"/>'
+        if tun[i]:
+            seg += (f'<rect class="tn" x="{x:.1f}" y="{base - (ben[i] + tun[i]) * sy:.1f}" width="{bw - 6:.1f}" '
+                    f'height="{tun[i] * sy:.1f}"/>')
+        out.append(f'<g class="grow-y" style="animation-delay:{i * 35}ms">{seg}</g>')
+    for v in (0.4, 0.5, 0.6, 0.7, 0.8):
+        out.append(f'<text class="ax" x="{xx(v):.1f}" y="{base + 30}" text-anchor="middle">{v:.1f}</text>')
+    out.append(f'<text class="ax" x="{x1}" y="{base + 64}" text-anchor="end">anomaly score, higher means stranger</text>')
+    tx = xx(thr)
+    out.append(f'<g class="st1"><line class="thr" x1="{tx:.1f}" x2="{tx:.1f}" y1="{top - 4}" y2="{base}"/>'
+               f'<text class="an-t" x="{tx - 12:.1f}" y="{top + 12}" text-anchor="end">threshold {thr:.2f}</text>'
+               f'<text class="an-t" x="{x1}" y="{top + 12}" text-anchor="end">222 tunnel queries</text>'
+               f'<text class="an-s" x="{x0 + 8}" y="{top + 12}">1,609 normal queries</text></g></svg>')
+    return "".join(out)
+
+
+def fig_timeline(r: dict) -> str:
+    """Slide 16: every test query as a dot (time against score), the threshold, and the errors named."""
+    rows, thr = r["test_rows"], r["threshold"]
+    w, h, x0, x1, base, top = 1144, 272, 70, 1136, 214, 58
+    lo, hi = 0.35, 0.82
+    span = max(x[0] for x in rows)
+
+    def px(t):
+        return x0 + t / span * (x1 - x0)
+
+    def py(v):
+        return base - (v - lo) / (hi - lo) * (base - top)
+
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="Anomaly score of every test query over the test period">']
+    for v in (0.4, 0.5, 0.6, 0.7, 0.8):
+        out.append(f'<line class="grid" x1="{x0}" x2="{x1}" y1="{py(v):.1f}" y2="{py(v):.1f}"/>'
+                   f'<text class="ax" x="{x0 - 12}" y="{py(v) + 6:.1f}" text-anchor="end">{v:.1f}</text>')
+    for m in (0, 10, 20, 30):
+        out.append(f'<text class="ax" x="{px(m * 60):.1f}" y="{base + 30}" '
+                   f'text-anchor="{"start" if m == 0 else "middle"}">{m} min</text>')
+    seen, benign, tunnel = set(), [], []
+    for t, sc, y, a, par in rows:
+        key = (round(px(t)), round(py(sc)), y)
+        if key in seen:
+            continue
+        seen.add(key)
+        (tunnel if y else benign).append((px(t), py(sc)))
+    out.append('<g class="wipe">' + "".join(f'<circle class="dot" cx="{x:.1f}" cy="{y:.1f}" r="3"/>' for x, y in benign)
+               + "".join(f'<circle class="dot t" cx="{x:.1f}" cy="{y:.1f}" r="3.5"/>' for x, y in tunnel) + "</g>")
+    out.append(f'<line class="thr draw" pathLength="1" x1="{x0}" x2="{x1}" y1="{py(thr):.1f}" y2="{py(thr):.1f}"/>')
+    # the errors: first tunnel queries (all at one instant) and the single false alarm of this seed
+    t_first = [x for x in rows if x[2] == 1][0][0]
+    misses = [x for x in rows if x[2] == 1 and x[3] == 0]
+    fps = [x for x in rows if x[2] == 0 and x[3] == 1]
+    mx = px(t_first)
+    out.append('<g class="ann">')
+    for _, sc, *_ in misses:
+        out.append(f'<circle class="ring" cx="{mx:.1f}" cy="{py(sc):.1f}" r="9"/>')
+    out.append(f'<line class="lead" x1="{mx + 14:.1f}" x2="{mx + 40:.1f}" y1="{py(0.76):.1f}" y2="34"/>'
+               f'<text class="an-t" x="{mx + 46:.1f}" y="40">tunnel session: first 3 queries missed</text>')
+    for t, sc, *_ in fps:
+        fx = px(t)
+        out.append(f'<circle class="ring" cx="{fx:.1f}" cy="{py(sc):.1f}" r="9"/>'
+                   f'<line class="lead" x1="{fx:.1f}" x2="{fx - 20:.1f}" y1="{py(sc) - 11:.1f}" y2="34"/>'
+                   f'<text class="an-t" x="{fx - 26:.1f}" y="40" text-anchor="end">a false alarm</text>')
+    out.append("</g></svg>")
+    return "".join(out)
+
+
+def fig_window(r: dict) -> str:
+    """Slide 14: false-positive queries with a 60 and a 300 second window (folds_median, ten seeds)."""
+    vals = [("60 seconds", r["window_60"]["fp"], ""), ("300 seconds", r["window_300"]["fp"], " hot")]
+    w, h, ax, maxw, pitch, y0 = 640, 200, 176, 360, 68, 46
+    top = vals[0][1]
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="False-positive queries with a 60 and a 300 second window">',
+           '<text class="ax" x="0" y="20">False-positive queries in the test period</text>']
+    for i, (name, v, hot) in enumerate(vals):
+        y = y0 + i * pitch
+        bw = maxw * v / top
+        out.append(f'<text class="bar-l{hot}" x="0" y="{y + 25}">{name}</text>'
+                   f'<rect class="bar grow-x{hot}" x="{ax}" y="{y}" width="{bw:.1f}" height="36" rx="4" '
+                   f'style="animation-delay:{i * 110}ms"/>'
+                   f'<text class="bar-v count{hot}" data-to="{v:.1f}" data-dec="1" x="{ax + bw + 14:.1f}" '
+                   f'y="{y + 28}">{v:.1f}</text>')
+    out.append(f'<line class="axis" x1="{ax}" x2="{ax}" y1="{y0 - 10}" y2="{y0 + 2 * pitch - 22}"/></svg>')
+    return "".join(out)
+
+
+def fig_alt() -> str:
+    """Slide 15: tunnel queries found, and normal queries wrongly flagged, for three algorithms."""
+    w, h, lw = 1144, 244, 236
+    p1, p2, pw = lw, 690, 320
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="Isolation Forest, Local Outlier Factor and One-Class SVM compared">',
+           f'<text class="ax" x="{p1}" y="22">Tunnel queries found</text>'
+           f'<text class="ax" x="{p2}" y="22">Normal queries flagged</text>'
+           f'<text class="ax" x="{w}" y="22" text-anchor="end">False incidents</text>']
+    for i, (name, rec, fpr, inc) in enumerate(ALT):
+        y = 48 + i * 66
+        hot = " hot" if i == 0 else ""
+        out.append(f'<text class="bar-l{hot}" x="0" y="{y + 27}">{name}</text>')
+        out.append(f'<rect class="bar grow-x{hot}" x="{p1}" y="{y}" width="{pw * rec:.1f}" height="38" rx="4" '
+                   f'style="animation-delay:{i * 110}ms"/>'
+                   f'<text class="bar-v{hot}" x="{p1 + pw * rec + 12:.1f}" y="{y + 29}">{rec * 100:.2f}%</text>')
+        fw = max(250 * fpr / 0.08, 4)
+        out.append(f'<rect class="bar grow-x{hot}" x="{p2}" y="{y}" width="{fw:.1f}" height="38" rx="4" '
+                   f'style="animation-delay:{i * 110 + 60}ms"/>'
+                   f'<text class="bar-v{hot}" x="{p2 + fw + 12:.1f}" y="{y + 29}">{fpr * 100:.2f}%</text>')
+        out.append(f'<text class="bar-v{hot}" x="{w}" y="{y + 29}" text-anchor="end">{inc:.1f}</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def fig_choke() -> str:
+    """Slide 18: the resolver as the one place DNS may leave the network, the direct path closed."""
+    w, h = 1144, 216
+    nodes = [(0, "Client", "may only ask the resolver", ""),
+             (432, "Internal resolver", "logs every query", " hot"),
+             (864, "Outside DNS", "the attacker's included", "")]
+    out = [f'<svg class="fig" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
+           f'aria-label="DNS may only leave through the internal resolver">',
+           '<defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" '
+           'orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arr-h"/></marker></defs>']
+    for gx in (280, 712):
+        out.append(f'<line class="link" x1="{gx + 10}" x2="{gx + 142}" y1="76" y2="76" marker-end="url(#arr2)"/>')
+    for x, title, sub, hot in nodes:
+        out.append(f'<g class="node{hot}"><rect x="{x}" y="28" width="280" height="96" rx="14"/>'
+                   f'<text class="node-t" x="{x + 24}" y="70">{title}</text>'
+                   f'<text class="node-s" x="{x + 24}" y="100">{sub}</text></g>')
+    out.append('<path class="direct" d="M140 134 V170 H1004 V134"/>')
+    out.append('<g class="shut"><circle cx="572" cy="170" r="16"/><path d="M563 161 L581 179 M581 161 L563 179"/></g>')
+    out.append('<text class="an-t shut-l" x="572" y="210" text-anchor="middle">direct DNS out: closed</text>')
+    out.append('<text class="an-s" x="572" y="18" text-anchor="middle">the only way out</text></svg>')
+    return "".join(out)
+
+
 # ---------------------------------------------------------------- page
 CSS = r"""
 @font-face{font-family:Inter;src:url(data:font/woff2;base64,__FONT__) format('woff2');font-weight:100 900;font-display:block}
@@ -366,6 +597,33 @@ border-bottom:3px solid var(--rule);padding-bottom:8px;line-height:1.2}
 .vs li{position:relative;padding:9px 0 9px 26px;border-top:1px solid var(--rule);line-height:1.3}
 .vs li::before{content:"";position:absolute;left:0;top:17px;width:11px;height:11px;border-radius:3px;background:var(--brand)}
 .vs .weak li::before{background:var(--grey)}
+/* slides 10 to 19: detector, results, mitigation */
+.fn{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--brand);line-height:1.2;margin-bottom:6px}
+.seg-fit{fill:var(--tint2);stroke:var(--rule);stroke-width:1.5}
+.seg-val{fill:#DFCBC7;stroke:var(--rule);stroke-width:1.5}
+.seg-test{fill:var(--tint);stroke:var(--rule);stroke-width:1.5}
+.seg-tun{fill:var(--red)}
+.sp-t{font-size:21px;font-weight:700;fill:var(--ink)}
+.sp-n{font-size:21px;font-weight:500;fill:var(--ink)}
+.sp-br{stroke:var(--grey);stroke-width:2}
+.sp-lead{stroke:var(--red);stroke-width:2}
+.thr{stroke:var(--red);stroke-width:3}
+.thr.draw{stroke-dasharray:1;stroke-dashoffset:0}
+.dot{fill:var(--grey)}
+.dot.t{fill:var(--red)}
+.ring{fill:none;stroke:var(--red);stroke-width:2.5}
+.lead{stroke:var(--red);stroke-width:2}
+.stats{display:flex;gap:24px}
+.stat{flex:1 1 0;background:var(--tint);border-radius:14px;padding:22px 26px 24px;border-top:6px solid var(--brand)}
+.stat .big{font-size:84px;line-height:1;font-weight:700;letter-spacing:-.035em;color:var(--ink);white-space:nowrap}
+.stat .big small{font-size:48px;font-weight:700;letter-spacing:-.02em;color:var(--muted);margin-left:4px}
+.stat .lb{margin-top:14px;font-weight:500;color:var(--muted);line-height:1.35}
+.stat.hot{background:var(--brand);border-top-color:var(--brand)}
+.stat.hot .big,.stat.hot .big small{color:#fff}
+.stat.hot .lb{color:var(--onbrand)}
+.direct{fill:none;stroke:var(--grey);stroke-width:3;stroke-dasharray:3 9;stroke-linecap:round}
+.shut circle{fill:var(--red)}
+.shut path{fill:none;stroke:#fff;stroke-width:4;stroke-linecap:round}
 
 /* motion: the base state of every element is its final state, so print and reduced motion need nothing */
 @keyframes rise{from{opacity:0;transform:translateY(16px)}}
@@ -385,6 +643,12 @@ border-bottom:3px solid var(--rule);padding-bottom:8px;line-height:1.2}
 .slide.is-active .rail-call,.slide.is-active .call,.slide.is-active .call-l{animation:pop .5s linear 3.4s backwards}
 .slide.is-active .shell{animation:shell .5s var(--ease) backwards;transform-box:fill-box;transform-origin:50% 50%}
 .slide.is-active .payload{animation:trip 2.8s linear .9s 2}
+@keyframes wipe{from{clip-path:inset(0 100% 0 0)}}
+.slide.is-active .wipe{animation:wipe 2.2s linear .3s backwards}
+.slide.is-active .thr.draw{animation:draw 1.2s var(--ease) 1.4s backwards}
+.slide.is-active .ann,.slide.is-active .seg-tun,.slide.is-active .sp-lead,.slide.is-active .sp-lead-t,.slide.is-active .shut,.slide.is-active .shut-l{animation:pop .5s linear 2.6s backwards}
+.slide.is-active .seg-tun,.slide.is-active .sp-lead,.slide.is-active .sp-lead-t{animation-delay:1.3s}
+.slide.is-active .shut,.slide.is-active .shut-l{animation-delay:1s}
 /* progressive reveal, only where the order is the argument. Gated on script being alive */
 .js .st1{opacity:0;transition:opacity .45s var(--ease)}
 .js .slide.s1 .st1{opacity:1}
@@ -415,11 +679,12 @@ JS = r"""
     });
   }
   function count(el){
-    var to=+el.getAttribute('data-to'),t0=null,delay=+(el.getAttribute('data-delay')||0);
-    if(reduce){el.textContent=to;return;}
-    el.textContent='0';
+    var to=+el.getAttribute('data-to'),dec=+(el.getAttribute('data-dec')||0),t0=null,delay=+(el.getAttribute('data-delay')||0);
+    function fmt(v){return dec?v.toFixed(dec):String(Math.round(v));}
+    if(reduce){el.textContent=fmt(to);return;}
+    el.textContent=fmt(0);
     function tick(t){if(t0===null){t0=t+delay;}var p=Math.min(Math.max((t-t0)/1100,0),1);
-      el.textContent=Math.round(to*(1-Math.pow(1-p,3)));if(p<1){requestAnimationFrame(tick);}}
+      el.textContent=fmt(to*(1-Math.pow(1-p,3)));if(p<1){requestAnimationFrame(tick);}}
     requestAnimationFrame(tick);
   }
   function go(i,s){
@@ -465,6 +730,7 @@ def slide(n: int, eyebrow: str, title: str, body: str, src: str = "", steps: int
 
 def build() -> str:
     f = facts(load())
+    res = load_results()
     logo = b64(ASSETS / "jads_logo.png")
     ratio = f["uniq_top"][0][1] / f["uniq_top"][1][1]
     s = []
@@ -489,7 +755,8 @@ def build() -> str:
                    'to the server that owns the domain.</p></div>'
                    '<div class="card rv" style="--i:5"><h2>Never cached</h2><p>A repeated name never reaches the '
                    'attacker, so every query needs a new name.</p></div></div>',
-                   'In our capture the client reached the tunnel server directly, on the same network segment.'))
+                   'How a tunnel normally travels. In our capture the client reached the tunnel server directly, '
+                   'on the same network segment.'))
 
     s.append(slide(4, "Discovery", "One domain gives itself away",
                    f'<div class="cols">{fig_unique(f)}<ul class="points">'
@@ -569,6 +836,128 @@ def build() -> str:
                    f'<p class="callout rv" style="--i:4"><b>{f["lane_counts"][2]} of the {f["session_n"]} tunnel '
                    'queries are short pings that look normal on their own.</b> So the detector has to judge the '
                    'domain, not the single query.</p>'))
+
+    fin, w60, w300 = res["final"], res["window_60"], res["window_300"]
+
+    def card(fn, head, text, i):
+        return (f'<div class="card rv" style="--i:{i}"><p class="fn">{fn}</p><h2>{head}</h2><p>{text}</p></div>')
+
+    # 10: the features
+    s.append(slide(10, "Detection", "Four features, none about the tool",
+                   '<div class="cards" style="margin-top:0">'
+                   + card("name_bytes", "Name length", "Long names carry data. Counted in bytes, as on the wire.", 2)
+                   + card("uniq_names_300s", "Unique names", "Different names asked under one domain in the last 5 minutes.", 3)
+                   + card("uniq_ratio_300s", "Share of new names", "Normal sites repeat names. A tunnel almost never does.", 4)
+                   + card("norepeat_tol", "No repeats yet", "Unique names times the share of new names, with no time window.", 5)
+                   + '</div><p class="absent rv" style="--i:6"><b>Left out on purpose:</b> IP addresses, source port, '
+                   'resolver and record type. They separate this capture perfectly and say nothing about tunnels.</p>',
+                   'Counted per client and parent domain, from the earlier queries only. Report section 3.1.'))
+
+    # 11: the split
+    s.append(slide(11, "Training", "Trained on normal traffic only",
+                   fig_split(res) + '<div class="cards" style="margin-top:14px">'
+                   '<div class="card rv" style="--i:5"><h2>Normal only</h2><p>The forest learns what normal DNS '
+                   'looks like. The tunnel is never in training.</p></div>'
+                   '<div class="card rv" style="--i:6"><h2>Time order</h2><p>Neighbouring queries are near copies, '
+                   'so a random split would leak.</p></div>'
+                   '<div class="card rv" style="--i:7"><h2>Line from validation</h2><p>The threshold is the highest '
+                   'score of any normal validation query.</p></div></div>',
+                   'The first burst is left out: it is an exact copy of the second, so it would be tested twice.'))
+
+    # 12: the score histogram, tunnel coloured on the click
+    s.append(slide(12, "Result", "One line catches the tunnel",
+                   fig_scores(res) + f'<p class="note st1">The threshold is <mark>{res["threshold"]:.2f}</mark>, set '
+                   f'on the validation period. <mark>No test query</mark> was used to choose it.</p>',
+                   'Anomaly score of the 1,831 test queries, one seed. The tunnel turns red on the click.', steps=1))
+
+    # 13: the headline numbers
+    s.append(slide(13, "Result", "Almost every tunnel query found",
+                   '<div class="stats">'
+                   f'<div class="stat rv" style="--i:2"><p class="big"><span class="count" data-to="{fin["recall"] * 100:.2f}" '
+                   f'data-dec="2">{fin["recall"] * 100:.2f}</span><small>%</small></p><p class="lb">of the 222 tunnel '
+                   'queries found</p></div>'
+                   f'<div class="stat rv" style="--i:3"><p class="big"><span class="count" data-to="{fin["precision"] * 100:.1f}" '
+                   f'data-dec="1">{fin["precision"] * 100:.1f}</span><small>%</small></p><p class="lb">of the alerts '
+                   'were real tunnel queries</p></div>'
+                   f'<div class="stat hot rv" style="--i:4"><p class="big"><span class="count" data-to="{fin["false_incidents"]:.1f}" '
+                   f'data-dec="1">{fin["false_incidents"]:.1f}</span></p><p class="lb">false incidents in 40 minutes '
+                   'of normal traffic</p></div></div>'
+                   '<ul class="points rv" style="--i:5;width:auto;margin-top:26px">'
+                   f'<li>False-positive rate <mark>{fin["fpr"] * 100:.2f}%</mark>, PR AUC <mark>{fin["pr_auc"]:.3f}</mark>, '
+                   f'the same on ten random seeds (spread {res["pr_auc_sd"]:.4f}).</li>'
+                   '<li>The first alert comes on the <mark>fourth query</mark> of the session, before the call starts.</li></ul>',
+                   'Mean of ten random seeds, 300 second window, threshold from the validation period. Report section 3.3.'))
+
+    # 14: window
+    s.append(slide(14, "Choices", "A longer window, fewer false alarms",
+                   f'<div class="cols">{fig_window(res)}<ul class="points">'
+                   f'<li class="rv" style="--i:2">Recall stays at <mark>{w300["recall"] * 100:.2f}%</mark> for both.</li>'
+                   f'<li class="rv" style="--i:3">PR AUC is the same: {w60["pr_auc"]:.4f} and {w300["pr_auc"]:.4f}.</li>'
+                   f'<li class="rv" style="--i:4"><mark>{(1 - w300["fp"] / w60["fp"]) * 100:.0f}% fewer</mark> '
+                   'false-positive queries.</li>'
+                   '<li class="rv" style="--i:5">We chose 300 seconds after seeing the test period. That is a '
+                   'limit, not a result.</li></ul></div>'
+                   '<p class="verdict rv" style="--i:6"><b>Final:</b> the validation maximum as threshold gives '
+                   f'<mark>{fin["fp"]:.1f}</mark> false-positive queries.</p>',
+                   'Bars: threshold from five time ordered folds. Mean of ten seeds. Report section 3.3.'))
+
+    # 15: alternatives
+    s.append(slide(15, "Alternatives", "Isolation Forest beats both rivals",
+                   fig_alt() + '<p class="verdict rv" style="--i:6"><b>One configuration each.</b> We did not tune '
+                   'Local Outlier Factor or One-Class SVM, so we cannot say why they score lower.</p>',
+                   'Same four features, same split, same threshold rule. Isolation Forest is the mean of ten seeds. '
+                   'Report Table 2.'))
+
+    # 16: errors
+    s.append(slide(16, "Errors", "Where the detector goes wrong",
+                   fig_timeline(res) + '<div class="cards" style="margin-top:14px">'
+                   '<div class="card rv" style="--i:5"><h2>Missed: always the same three</h2><p>The first queries of '
+                   'the session. One to three names so far looks like any first lookup of a new domain.</p></div>'
+                   '<div class="card rv" style="--i:6"><h2>False alarms: about 3 per run</h2><p>Yahoo asks for 19 to '
+                   '25 names in one window. Azure sends a few long names that are not repeated.</p></div></div>',
+                   'Each dot is one test query. Red: tunnel. Grey: normal. One seed. Report section 3.4.'))
+
+    # 17: limits
+    rec, fpr, prev = 0.9865, 0.0021, 0.001
+    prec_rare = rec * prev / (rec * prev + fpr * (1 - prev))
+    assert 0.315 < prec_rare < 0.325, prec_rare
+    s.append(slide(17, "Limits", "What the numbers do not prove",
+                   '<div class="vs"><div class="side rec rv" style="--i:2"><h2>Holds up</h2><p class="lbl">Tested</p><ul>'
+                   '<li>The same result on ten random seeds</li>'
+                   f'<li>A tunnel 60 times slower: <mark>{SLOW_TUNNEL_RECALL}%</mark> still found</li>'
+                   '<li>An alert on the fourth query of a session</li></ul></div>'
+                   '<div class="side weak rv" style="--i:3"><h2>Does not carry over</h2><p class="lbl">Limits</p><ul>'
+                   '<li>One tunnel session, one normal host</li>'
+                   '<li>Window and threshold chosen after seeing the test period</li>'
+                   f'<li>Tunnels at 0.1% of traffic: precision falls to about <mark>{prec_rare * 100:.0f}%</mark></li>'
+                   f'<li>Little training data: false alarms rise from {QUIET_TRAINING_FPR[0]:.2f}% to '
+                   f'{QUIET_TRAINING_FPR[1]:.2f}%</li></ul></div></div>'
+                   '<p class="callout rv" style="--i:4"><b>A retrospective benchmark, not an independent validation.</b> '
+                   'Real traffic would need new data.</p>'))
+
+    # 18: mitigation
+    s.append(slide(18, "Mitigation", "Make DNS leave through one door",
+                   fig_choke() + '<div class="cards" style="margin-top:14px">'
+                   '<div class="card rv" style="--i:4"><h2>Prevention</h2><p>Only the resolver may send DNS out. '
+                   'Refuse or flag NULL records, cap unique names per client.</p></div>'
+                   '<div class="card rv" style="--i:5"><h2>Detection</h2><p>Run the detector on resolver logs, plus '
+                   'cheap rules such as NULL queries.</p></div>'
+                   '<div class="card rv" style="--i:6"><h2>Response</h2><p>Isolate the client, keep the logs, then '
+                   'decode the tunnel to see what went through.</p></div></div>',
+                   'MITRE mitigations M1037 and M1031. Report section 4.'))
+
+    # 19: conclusion
+    s.append(slide(19, "Conclusion", "What we take away",
+                   '<div class="vs"><div class="side rec rv" style="--i:2"><h2>What we found</h2><p class="lbl">Result</p><ul>'
+                   f'<li>An <mark>iodine</mark> tunnel, found through one domain with {f["uniq_top"][0][1]} unique names</li>'
+                   '<li>Inside it one voice call, no sign of data theft</li>'
+                   f'<li>Isolation Forest finds <mark>{fin["recall"] * 100:.2f}%</mark> of the tunnel queries with '
+                   f'{fin["false_incidents"]:.1f} false incidents</li></ul></div>'
+                   '<div class="side weak rv" style="--i:3"><h2>Next time</h2><p class="lbl">What we would change</p><ul>'
+                   '<li>Check every number from the log against the packets</li>'
+                   '<li>Fix window and threshold before looking at the test period</li>'
+                   '<li>Record other tunnel tools and slower tunnels</li></ul></div></div>',
+                   'Report sections 5 and 6.'))
 
     page = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
