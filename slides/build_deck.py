@@ -246,7 +246,8 @@ def fig_shells() -> str:
 ALT = [("Isolation Forest", 0.9865, 0.0021, 1.9), ("Local Outlier Factor", 0.9279, 0.0068, 10.0),
        ("One-Class SVM", 0.9820, 0.0746, 9.0)]
 SLOW_TUNNEL_RECALL = 98.3      # report 3.4: tunnel 60 times slower, chosen configuration
-QUIET_TRAINING_FPR = (4.79, 25.90)   # report 3.3: 60 s window, all training rows against 244 quiet ones
+STRESS_INCIDENTS = (1.8, 9.6)  # report 3.4.2 and notebook 05 cell 17: nine extra normal clients, first five seeds
+QUIET_TRAINING_FPR = (4.79, 25.90)  # report 3.3: 60 s window, all training rows against 244 quiet ones
 
 
 def load_results() -> dict:
@@ -850,7 +851,7 @@ def build() -> str:
                    + card("uniq_ratio_300s", "Share of new names", "Normal sites repeat names. A tunnel almost never does.", 4)
                    + card("norepeat_tol", "No repeats yet", "The log of unique names times the share of new names, with no time window.", 5)
                    + '</div><p class="absent rv" style="--i:6"><b>Left out on purpose:</b> IP addresses, source port, '
-                   'resolver and record type. They separate this capture perfectly and say nothing about tunnels.</p>',
+                   'answer flags, TTL, EDNS0 and record type. They separate this capture perfectly and say nothing about tunnels.</p>',
                    'Counted per client and parent domain, from the earlier queries only. Report section 3.1.'))
 
     # 11: how Isolation Forest decides (figure from `python -m src.plots`, report Figure 3.1)
@@ -886,7 +887,7 @@ def build() -> str:
     # 13: the score histogram, tunnel coloured on the click
     s.append(slide(13, "Result", "One line catches the tunnel",
                    fig_scores(res) + f'<p class="note st1">The threshold is <mark>{res["threshold"]:.2f}</mark>, set '
-                   f'on the validation period. <mark>No test query</mark> was used to choose it.</p>',
+                   f'on the validation period. <mark>No test query</mark> was used to compute it.</p>',
                    'Anomaly score of the 1,831 test queries, one seed. The tunnel turns red on the click.', steps=1))
 
     # 14: the headline numbers
@@ -904,13 +905,13 @@ def build() -> str:
                    '<ul class="points rv" style="--i:5;width:auto;margin-top:26px">'
                    f'<li>False-positive rate <mark>{fin["fpr"] * 100:.2f}%</mark>, PR AUC <mark>{fin["pr_auc"]:.3f}</mark>, '
                    f'the same on ten random seeds (spread {res["pr_auc_sd"]:.4f}).</li>'
-                   '<li>The first alert comes on the <mark>fourth query</mark> of the session, before the call starts.</li></ul>',
+                   '<li>The first alert comes on the <mark>fourth query</mark> of the session, before the data transfer starts.</li></ul>',
                    'Mean of ten random seeds, 300 second window, threshold from the validation period. Report section 3.3.'))
 
     # 15: window
     s.append(slide(15, "Choices", "A longer window, fewer false alarms",
                    f'<div class="cols">{fig_window(res)}<ul class="points">'
-                   f'<li class="rv" style="--i:2">Recall stays at <mark>{w300["recall"] * 100:.2f}%</mark> for both.</li>'
+                   f'<li class="rv" style="--i:2">Recall stays the same: <mark>{w60["recall"] * 100:.2f}%</mark> and <mark>{w300["recall"] * 100:.2f}%</mark>.</li>'
                    f'<li class="rv" style="--i:3">PR AUC is the same: {w60["pr_auc"]:.4f} and {w300["pr_auc"]:.4f}.</li>'
                    f'<li class="rv" style="--i:4"><mark>{(1 - w300["fp"] / w60["fp"]) * 100:.0f}% fewer</mark> '
                    'false-positive queries.</li>'
@@ -935,7 +936,7 @@ def build() -> str:
                    f'<div class="card rv" style="--i:6"><h2>False incidents: {fin["false_incidents"]:.1f} per 40 minutes</h2>'
                    '<p>Yahoo asks for 19 to 25 names in one window. Azure sends a few long names that are not '
                    'repeated.</p></div></div>',
-                   'Each dot is one test query. Red: tunnel. Grey: normal. One seed. Report section 3.4.'))
+                   'Each dot is one test query. Red: tunnel. Grey: normal. One seed. Report sections 3.3.4 and 3.4.3.'))
 
     # 18: limits
     rec, fpr, prev = 0.9865, 0.0021, 0.001
@@ -951,7 +952,9 @@ def build() -> str:
                    '<li>Window and threshold chosen after seeing the test period</li>'
                    f'<li>Tunnels at 0.1% of traffic: precision falls to about <mark>{prec_rare * 100:.0f}%</mark></li>'
                    f'<li>Little training data: false alarms rise from {QUIET_TRAINING_FPR[0]:.2f}% to '
-                   f'{QUIET_TRAINING_FPR[1]:.2f}%</li></ul></div></div>'
+                   f'{QUIET_TRAINING_FPR[1]:.2f}%</li>'
+                   f'<li>Nine extra normal clients: false incidents rise from {STRESS_INCIDENTS[0]} to '
+                   f'<mark>{STRESS_INCIDENTS[1]}</mark></li></ul></div></div>'
                    '<p class="callout rv" style="--i:4"><b>A retrospective benchmark, not an independent validation.</b> '
                    'Real traffic would need new data.</p>'))
 
