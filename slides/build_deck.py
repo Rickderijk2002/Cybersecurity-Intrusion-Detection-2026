@@ -848,7 +848,7 @@ def build() -> str:
                    + card("name_bytes", "Name length", "Long names carry data. Counted in bytes, as on the wire.", 2)
                    + card("uniq_names_300s", "Unique names", "Different names asked under one domain in the last 5 minutes.", 3)
                    + card("uniq_ratio_300s", "Share of new names", "Normal sites repeat names. A tunnel almost never does.", 4)
-                   + card("norepeat_tol", "No repeats yet", "Unique names times the share of new names, with no time window.", 5)
+                   + card("norepeat_tol", "No repeats yet", "The log of unique names times the share of new names, with no time window.", 5)
                    + '</div><p class="absent rv" style="--i:6"><b>Left out on purpose:</b> IP addresses, source port, '
                    'resolver and record type. They separate this capture perfectly and say nothing about tunnels.</p>',
                    'Counted per client and parent domain, from the earlier queries only. Report section 3.1.'))
@@ -902,19 +902,20 @@ def build() -> str:
                    'Bars: threshold from five time ordered folds. Mean of ten seeds. Report section 3.3.'))
 
     # 15: alternatives
-    s.append(slide(15, "Alternatives", "Isolation Forest beats both rivals",
+    s.append(slide(15, "Alternatives", "Isolation Forest scores best in our comparison",
                    fig_alt() + '<p class="verdict rv" style="--i:6"><b>One configuration each.</b> We did not tune '
                    'Local Outlier Factor or One-Class SVM, so we cannot say why they score lower.</p>',
                    'Same four features, same split, same threshold rule. Isolation Forest is the mean of ten seeds. '
-                   'Report Table 2.'))
+                   'Report Table 3.2.'))
 
     # 16: errors
     s.append(slide(16, "Errors", "Where the detector goes wrong",
                    fig_timeline(res) + '<div class="cards" style="margin-top:14px">'
                    '<div class="card rv" style="--i:5"><h2>Missed: always the same three</h2><p>The first queries of '
                    'the session. One to three names so far looks like any first lookup of a new domain.</p></div>'
-                   '<div class="card rv" style="--i:6"><h2>False alarms: about 3 per run</h2><p>Yahoo asks for 19 to '
-                   '25 names in one window. Azure sends a few long names that are not repeated.</p></div></div>',
+                   f'<div class="card rv" style="--i:6"><h2>False incidents: {fin["false_incidents"]:.1f} per 40 minutes</h2>'
+                   '<p>Yahoo asks for 19 to 25 names in one window. Azure sends a few long names that are not '
+                   'repeated.</p></div></div>',
                    'Each dot is one test query. Red: tunnel. Grey: normal. One seed. Report section 3.4.'))
 
     # 17: limits
