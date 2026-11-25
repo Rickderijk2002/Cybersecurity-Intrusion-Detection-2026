@@ -2,7 +2,7 @@
 
 Run from the repository root:  python slides/build_deck.py
 Slides 2 to 9 (attack investigation) are computed here from data/raw/dns.log (Canvas download) and
-data/labels.csv. Slides 10 to 19 (detector) read slides/results.json, which `python slides/compute_results.py`
+data/labels.csv. Slides 10 to 20 (detector) read slides/results.json, which `python slides/compute_results.py`
 writes from src/ and checks against the report's tables. Both parts assert the numbers they quote, so the
 deck fails loudly instead of drifting from the data.
 Output: slides/Group 3 Presentation.html (open in a browser, print to PDF to hand in).
@@ -242,7 +242,7 @@ def fig_shells() -> str:
 
 # ---------------------------------------------------------------- detector figures (slides 10 to 19)
 # Numbers taken from the report and not recomputed here: the tuned comparison runs live in notebook 05.
-# Report Table 2 (300 s window, val_max). Local Outlier Factor and One-Class SVM: one configuration each.
+# Report Table 3.3 (300 s window, val_max). Local Outlier Factor and One-Class SVM: one configuration each.
 ALT = [("Isolation Forest", 0.9865, 0.0021, 1.9), ("Local Outlier Factor", 0.9279, 0.0068, 10.0),
        ("One-Class SVM", 0.9820, 0.0746, 9.0)]
 SLOW_TUNNEL_RECALL = 98.3      # report 3.4: tunnel 60 times slower, chosen configuration
@@ -848,13 +848,32 @@ def build() -> str:
                    + card("name_bytes", "Name length", "Long names carry data. Counted in bytes, as on the wire.", 2)
                    + card("uniq_names_300s", "Unique names", "Different names asked under one domain in the last 5 minutes.", 3)
                    + card("uniq_ratio_300s", "Share of new names", "Normal sites repeat names. A tunnel almost never does.", 4)
-                   + card("norepeat_tol", "No repeats yet", "Unique names times the share of new names, with no time window.", 5)
+                   + card("norepeat_tol", "No repeats yet", "The log of unique names times the share of new names, with no time window.", 5)
                    + '</div><p class="absent rv" style="--i:6"><b>Left out on purpose:</b> IP addresses, source port, '
                    'resolver and record type. They separate this capture perfectly and say nothing about tunnels.</p>',
                    'Counted per client and parent domain, from the earlier queries only. Report section 3.1.'))
 
-    # 11: the split
-    s.append(slide(11, "Training", "Trained on normal traffic only",
+    # 11: how Isolation Forest decides (figure from `python -m src.plots`, report Figure 3.1)
+    iforest_png = ROOT / "notebooks" / "figures" / "isolation_forest_view_300s.png"
+    assert iforest_png.exists(), "run `python -m src.plots` first"
+    s.append(slide(11, "The model", "Isolation Forest: how easy is a query to isolate?",
+                   '<div class="cols" style="gap:48px;align-items:center">'
+                   # only the right panel of the figure (the cuts); the left panel is in the report
+                   '<div class="rv" style="--i:2;width:460px;height:368px;overflow:hidden">'
+                   f'<img alt="Number of random cuts needed to isolate each test query" '
+                   f'style="height:368px;width:auto;margin-left:-460px" '
+                   f'src="data:image/png;base64,{b64(iforest_png)}"></div>'
+                   '<div style="display:flex;flex-direction:column;gap:12px;width:636px">'
+                   '<div class="card rv" style="--i:3"><h2>1 · Random cuts</h2><p>300 trees cut normal traffic on a '
+                   'random feature at a random value, until every query stands alone.</p></div>'
+                   '<div class="card rv" style="--i:4"><h2>2 · Few cuts = strange</h2><p>A normal query needs about '
+                   '<mark>11</mark> cuts, a tunnel query about <mark>4.5</mark>.</p></div>'
+                   '<div class="card rv" style="--i:5"><h2>3 · A line on the score</h2><p>Fewer cuts, higher score. '
+                   'Past the line (<mark>5.3</mark> cuts): alert.</p></div></div></div>',
+                   'Average number of random cuts per test query, 300 second window, one seed. Report Figure 3.1.'))
+
+    # 12: the split
+    s.append(slide(12, "Training", "Trained on normal traffic only",
                    fig_split(res) + '<div class="cards" style="margin-top:14px">'
                    '<div class="card rv" style="--i:5"><h2>Normal only</h2><p>The forest learns what normal DNS '
                    'looks like. The tunnel is never in training.</p></div>'
@@ -864,14 +883,14 @@ def build() -> str:
                    'score of any normal validation query.</p></div></div>',
                    'The first burst is left out: it is an exact copy of the second, so it would be tested twice.'))
 
-    # 12: the score histogram, tunnel coloured on the click
-    s.append(slide(12, "Result", "One line catches the tunnel",
+    # 13: the score histogram, tunnel coloured on the click
+    s.append(slide(13, "Result", "One line catches the tunnel",
                    fig_scores(res) + f'<p class="note st1">The threshold is <mark>{res["threshold"]:.2f}</mark>, set '
                    f'on the validation period. <mark>No test query</mark> was used to choose it.</p>',
                    'Anomaly score of the 1,831 test queries, one seed. The tunnel turns red on the click.', steps=1))
 
-    # 13: the headline numbers
-    s.append(slide(13, "Result", "Almost every tunnel query found",
+    # 14: the headline numbers
+    s.append(slide(14, "Result", "Almost every tunnel query found",
                    '<div class="stats">'
                    f'<div class="stat rv" style="--i:2"><p class="big"><span class="count" data-to="{fin["recall"] * 100:.2f}" '
                    f'data-dec="2">{fin["recall"] * 100:.2f}</span><small>%</small></p><p class="lb">of the 222 tunnel '
@@ -888,8 +907,8 @@ def build() -> str:
                    '<li>The first alert comes on the <mark>fourth query</mark> of the session, before the call starts.</li></ul>',
                    'Mean of ten random seeds, 300 second window, threshold from the validation period. Report section 3.3.'))
 
-    # 14: window
-    s.append(slide(14, "Choices", "A longer window, fewer false alarms",
+    # 15: window
+    s.append(slide(15, "Choices", "A longer window, fewer false alarms",
                    f'<div class="cols">{fig_window(res)}<ul class="points">'
                    f'<li class="rv" style="--i:2">Recall stays at <mark>{w300["recall"] * 100:.2f}%</mark> for both.</li>'
                    f'<li class="rv" style="--i:3">PR AUC is the same: {w60["pr_auc"]:.4f} and {w300["pr_auc"]:.4f}.</li>'
@@ -901,27 +920,28 @@ def build() -> str:
                    f'<mark>{fin["fp"]:.1f}</mark> false-positive queries.</p>',
                    'Bars: threshold from five time ordered folds. Mean of ten seeds. Report section 3.3.'))
 
-    # 15: alternatives
-    s.append(slide(15, "Alternatives", "Isolation Forest beats both rivals",
+    # 16: alternatives
+    s.append(slide(16, "Alternatives", "Isolation Forest scores best in our comparison",
                    fig_alt() + '<p class="verdict rv" style="--i:6"><b>One configuration each.</b> We did not tune '
                    'Local Outlier Factor or One-Class SVM, so we cannot say why they score lower.</p>',
                    'Same four features, same split, same threshold rule. Isolation Forest is the mean of ten seeds. '
-                   'Report Table 2.'))
+                   'Report Table 3.3.'))
 
-    # 16: errors
-    s.append(slide(16, "Errors", "Where the detector goes wrong",
+    # 17: errors
+    s.append(slide(17, "Errors", "Where the detector goes wrong",
                    fig_timeline(res) + '<div class="cards" style="margin-top:14px">'
                    '<div class="card rv" style="--i:5"><h2>Missed: always the same three</h2><p>The first queries of '
                    'the session. One to three names so far looks like any first lookup of a new domain.</p></div>'
-                   '<div class="card rv" style="--i:6"><h2>False alarms: about 3 per run</h2><p>Yahoo asks for 19 to '
-                   '25 names in one window. Azure sends a few long names that are not repeated.</p></div></div>',
+                   f'<div class="card rv" style="--i:6"><h2>False incidents: {fin["false_incidents"]:.1f} per 40 minutes</h2>'
+                   '<p>Yahoo asks for 19 to 25 names in one window. Azure sends a few long names that are not '
+                   'repeated.</p></div></div>',
                    'Each dot is one test query. Red: tunnel. Grey: normal. One seed. Report section 3.4.'))
 
-    # 17: limits
+    # 18: limits
     rec, fpr, prev = 0.9865, 0.0021, 0.001
     prec_rare = rec * prev / (rec * prev + fpr * (1 - prev))
     assert 0.315 < prec_rare < 0.325, prec_rare
-    s.append(slide(17, "Limits", "What the numbers do not prove",
+    s.append(slide(18, "Limits", "What the numbers do not prove",
                    '<div class="vs"><div class="side rec rv" style="--i:2"><h2>Holds up</h2><p class="lbl">Tested</p><ul>'
                    '<li>The same result on ten random seeds</li>'
                    f'<li>A tunnel 60 times slower: <mark>{SLOW_TUNNEL_RECALL}%</mark> still found</li>'
@@ -935,8 +955,8 @@ def build() -> str:
                    '<p class="callout rv" style="--i:4"><b>A retrospective benchmark, not an independent validation.</b> '
                    'Real traffic would need new data.</p>'))
 
-    # 18: mitigation
-    s.append(slide(18, "Mitigation", "Make DNS leave through one door",
+    # 19: mitigation
+    s.append(slide(19, "Mitigation", "Make DNS leave through one door",
                    fig_choke() + '<div class="cards" style="margin-top:14px">'
                    '<div class="card rv" style="--i:4"><h2>Prevention</h2><p>Only the resolver may send DNS out. '
                    'Refuse or flag NULL records, cap unique names per client.</p></div>'
@@ -946,8 +966,8 @@ def build() -> str:
                    'decode the tunnel to see what went through.</p></div></div>',
                    'MITRE mitigations M1037 and M1031. Report section 4.'))
 
-    # 19: conclusion
-    s.append(slide(19, "Conclusion", "What we take away",
+    # 20: conclusion
+    s.append(slide(20, "Conclusion", "What we take away",
                    '<div class="vs"><div class="side rec rv" style="--i:2"><h2>What we found</h2><p class="lbl">Result</p><ul>'
                    f'<li>An <mark>iodine</mark> tunnel, found through one domain with {f["uniq_top"][0][1]} unique names</li>'
                    '<li>Inside it one voice call, no sign of data theft</li>'

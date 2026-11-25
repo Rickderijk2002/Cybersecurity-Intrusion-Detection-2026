@@ -115,11 +115,18 @@ def plot_capture_timeline(m, path):
 
 def main() -> None:
     from src.detector import run_detector
-    from src.features import feature_sets, load_matrix
+    from src.features import feature_sets, load_matrix, make_matrix
 
     scored, info = run_detector(load_matrix(), feature_sets(60)["forced"])
     out = plot_isolation_view(scored, info, FIGURES / "isolation_forest_view.png")
     print(f"wrote {out.relative_to(ROOT)}")
+    
+    # the report's final configuration: 300 s window, val_max threshold (seed 0)
+    m300 = make_matrix(window_s=300, write=False)
+    scored, info = run_detector(m300, feature_sets(300)["forced"], threshold="val_max")
+    out = plot_isolation_view(scored, info, FIGURES / "isolation_forest_view_300s.png", x="uniq_names_300s")
+    print(f"wrote {out.relative_to(ROOT)}")
+    
     out = plot_capture_timeline(load_matrix(), FIGURES / "capture_timeline.png")
     print(f"wrote {out.relative_to(ROOT)}")
 
