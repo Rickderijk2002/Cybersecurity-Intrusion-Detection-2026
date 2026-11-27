@@ -912,7 +912,7 @@ def build() -> str:
     s.append(slide(15, "Choices", "A longer window, fewer false alarms",
                    f'<div class="cols">{fig_window(res)}<ul class="points">'
                    f'<li class="rv" style="--i:2">Recall stays the same: <mark>{w60["recall"] * 100:.2f}%</mark> and <mark>{w300["recall"] * 100:.2f}%</mark>.</li>'
-                   f'<li class="rv" style="--i:3">PR AUC is the same: {w60["pr_auc"]:.4f} and {w300["pr_auc"]:.4f}.</li>'
+                   f'<li class="rv" style="--i:3">PR AUC is almost the same: {w60["pr_auc"]:.4f} and {w300["pr_auc"]:.4f}.</li>'
                    f'<li class="rv" style="--i:4"><mark>{(1 - w300["fp"] / w60["fp"]) * 100:.0f}% fewer</mark> '
                    'false-positive queries.</li>'
                    '<li class="rv" style="--i:5">We chose 300 seconds after seeing the test period. That is a '
