@@ -976,10 +976,11 @@ def build() -> str:
                    '<li>Inside it one voice call, no sign of data theft</li>'
                    f'<li>Isolation Forest finds <mark>{fin["recall"] * 100:.2f}%</mark> of the tunnel queries with '
                    f'{fin["false_incidents"]:.1f} false incidents</li></ul></div>'
-                   '<div class="side weak rv" style="--i:3"><h2>Next time</h2><p class="lbl">What we would change</p><ul>'
-                   '<li>Check every number from the log against the packets</li>'
-                   '<li>Fix window and threshold before looking at the test period</li>'
-                   '<li>Record other tunnel tools and slower tunnels</li></ul></div></div>',
+                   '<div class="side weak rv" style="--i:3"><h2>What comes next</h2><p class="lbl">Future work</p><ul>'
+                   '<li>Test on independent captures: other tunnel tools, slower tunnels, many normal hosts</li>'
+                   '<li>Count per client across all domains, so a tunnel spread over many domains is seen</li>'
+                   '<li>Move from a log file to a live detector on resolver traffic</li>'
+                   '<li>Combine it with simple rules, such as NULL queries, and test that</li></ul></div></div>',
                    'Report sections 5 and 6.'))
 
     page = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
